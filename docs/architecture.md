@@ -68,3 +68,35 @@ stateDiagram-v2
   APPROVED --> LOCKED: grace expired
   AMENDED --> IN_REVIEW: start review
 ```
+
+## Authorization Policy
+
+Authorization (`src/domain/authorization`) answers whether a **role** may attempt an
+operation on a **resource**. Lifecycle answers whether that attempt is valid in the
+**current workflow state**. The two concerns stay separate:
+
+- Authorization: role grants, note ownership, assigned-reviewer edit rights, resource presence
+- Lifecycle: status edges, MFA, amendment grace window, rejection reason, assigned-reviewer
+  transition ownership for approve/reject/return
+
+A single declarative `PERMISSION_DEFINITIONS` table is the source of truth for grants and
+ownership rules. `getPermissionsForRole` returns role-level capabilities only; resource
+checks still go through `authorize`.
+
+Client authorization is **UX guidance** (disable controls, explain denials). The server must
+still enforce authorization and lifecycle validation. Missing permission is not the same as
+missing data: `RESOURCE_CONTEXT_REQUIRED` means the caller omitted note context;
+`ROLE_NOT_PERMITTED` / `READ_ONLY_ROLE` mean the role cannot attempt the operation.
+
+`combineAuthorizationAndLifecycle` short-circuits on authorization denial, otherwise
+preserves the lifecycle denial reason codes unchanged.
+
+```mermaid
+flowchart LR
+  UI[UI intent] --> A[Authorization policy]
+  A -->|denied| AD[Authorization denial]
+  A -->|allowed| L[Lifecycle evaluator]
+  L -->|denied| LD[Lifecycle denial]
+  L -->|allowed| API[Future API request]
+  API --> SERVER[Server authorization and transition validation]
+```

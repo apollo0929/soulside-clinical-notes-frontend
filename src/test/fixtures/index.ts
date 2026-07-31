@@ -1,4 +1,8 @@
 export {
+  buildAuthorizationActor,
+  buildNoteAuthorizationResource,
+} from '@/test/fixtures/authorization'
+export {
   buildNote,
   buildNoteSummary,
   buildNoteVersion,

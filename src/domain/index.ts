@@ -1,3 +1,24 @@
+export {
+  type AllowedAuthorizationDecision,
+  AUTHORIZATION_DENIAL_REASON_CODES,
+  type AuthorizationActor,
+  type AuthorizationDecision,
+  type AuthorizationDenialReasonCode,
+  authorize,
+  type AuthorizeInput,
+  combineAuthorizationAndLifecycle,
+  type CombinedAccessDecision,
+  type DeniedAuthorizationDecision,
+  getAuthorizedPermissions,
+  getPermissionDecision,
+  getPermissionDefinition,
+  getPermissionsForRole,
+  hasPermission,
+  type NoteAuthorizationResource,
+  type Permission,
+  PERMISSION_DEFINITIONS,
+  PERMISSIONS,
+} from '@/domain/authorization'
 export type { Brand } from '@/domain/brand'
 export { type IsoDateTime, isoDateTimeSchema, parseIsoDateTime } from '@/domain/datetime'
 export {
