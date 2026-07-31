@@ -72,7 +72,7 @@ Playwright starts the Vite app automatically via `webServer` in `playwright.conf
 ```text
 src/
   app/          Application shell, routing, providers
-  domain/       Domain models (later steps)
+  domain/       Domain models, Zod contracts, DTO mappers
   features/     Feature modules (later steps)
   services/     External/service adapters (later steps)
   shared/       Shared UI, hooks, utils
@@ -82,6 +82,8 @@ e2e/            Playwright tests
 docs/           Design notes
 scripts/        Maintenance scripts
 ```
+
+Unit tests cover branded IDs, status/role enums, SOAP and API DTO schemas, and DTO→domain mappers.
 
 ## License
 
