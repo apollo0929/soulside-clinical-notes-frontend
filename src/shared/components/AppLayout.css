@@ -1,0 +1,53 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100vh;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.app-shell header,
+.app-shell footer {
+  border-bottom: 1px solid #d8d8d4;
+}
+
+.app-shell footer {
+  border-bottom: none;
+  border-top: 1px solid #d8d8d4;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+
+.app-shell nav ul,
+.app-shell section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.app-shell header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+}
+
+.app-shell header p {
+  margin-bottom: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.app-shell nav ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding-left: 0;
+}
+
+.app-shell [aria-disabled='true'] {
+  color: #6b6b6b;
+}
