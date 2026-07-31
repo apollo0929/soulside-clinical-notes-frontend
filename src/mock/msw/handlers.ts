@@ -5,13 +5,25 @@ import { parseIsoDateTime } from '@/domain/datetime'
 import { parseNoteId, parsePatientId, parseUserId } from '@/domain/ids'
 import { NOTE_LIFECYCLE_ACTIONS } from '@/domain/note-lifecycle'
 import { TRANSITION_SOURCES } from '@/domain/note-lifecycle'
-import { noteDetailDtoSchema, notesListResponseDtoSchema, noteStatusSchema } from '@/domain/schemas'
+import {
+  createVersionRequestDtoSchema,
+  createVersionSuccessResponseDtoSchema,
+  noteDetailDtoSchema,
+  notesListResponseDtoSchema,
+  noteStatusSchema,
+  versionConflictResponseDtoSchema,
+} from '@/domain/schemas'
 import {
   NOTE_LIST_SORT_FIELDS,
   type NoteListSortDirection,
   type NoteListSortField,
 } from '@/mock/cursor'
-import { isMockApiError, type MockApiError, mockErrorHttpBody } from '@/mock/errors'
+import {
+  createMockApiError,
+  isMockApiError,
+  type MockApiError,
+  mockErrorHttpBody,
+} from '@/mock/errors'
 import { parseActorHeaders } from '@/mock/msw/actor-headers'
 import { DEFAULT_NOTES_LIST_LIMIT, type MockBackendService } from '@/mock/services/backend'
 
@@ -180,6 +192,59 @@ export function createMockBackendHandlers(backend: MockBackendService) {
         newVersionId: result.newVersion?.id ?? null,
       })
     }),
+
+    http.post('*/api/notes/:id/versions', async ({ request, params }) => {
+      const actor = parseActorHeaders(request.headers)
+      if (isMockApiError(actor)) {
+        return errorResponse(actor)
+      }
+
+      let noteId
+      try {
+        noteId = parseNoteId(String(params.id))
+      } catch {
+        return errorResponse(createInvalid('Invalid note id.'))
+      }
+
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return errorResponse(createInvalid('Request body must be JSON.'))
+      }
+
+      const parsed = createVersionRequestDtoSchema.safeParse(body)
+      if (!parsed.success) {
+        return errorResponse(createInvalid('Invalid create-version request body.'))
+      }
+
+      const result = await backend.createVersion({
+        actor,
+        noteId,
+        baseVersionId: parsed.data.baseVersionId,
+        content: parsed.data.content,
+        clientMutationId: parsed.data.clientMutationId,
+        occurredAt: backend.clock.now(),
+        signal: request.signal,
+      })
+
+      if (isMockApiError(result)) {
+        if (result.code === 'VERSION_CONFLICT' && result.conflict) {
+          const conflict = versionConflictResponseDtoSchema.safeParse(result.conflict)
+          if (!conflict.success) {
+            return errorResponse(createInternal('Conflict response failed contract validation.'))
+          }
+          return HttpResponse.json(conflict.data, { status: 409 })
+        }
+        return errorResponse(result)
+      }
+
+      const validated = createVersionSuccessResponseDtoSchema.safeParse(result)
+      if (!validated.success) {
+        return errorResponse(createInternal('Create-version response failed contract validation.'))
+      }
+      return HttpResponse.json(validated.data, { status: 200 })
+    }),
   ]
 }
 
@@ -278,21 +343,17 @@ function errorResponse(error: MockApiError) {
 }
 
 function createInvalid(message: string): MockApiError {
-  return {
-    name: 'MockApiError',
+  return createMockApiError({
     code: 'INVALID_REQUEST',
     status: 400,
     message,
-    details: null,
-  }
+  })
 }
 
 function createInternal(message: string): MockApiError {
-  return {
-    name: 'MockApiError',
+  return createMockApiError({
     code: 'SIMULATED_INTERNAL_ERROR',
     status: 500,
     message,
-    details: null,
-  }
+  })
 }

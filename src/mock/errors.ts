@@ -1,3 +1,5 @@
+import type { VersionConflictResponseDto } from '@/domain/schemas'
+
 export const MOCK_ERROR_CODES = [
   'SIMULATED_INTERNAL_ERROR',
   'NOT_FOUND',
@@ -7,6 +9,11 @@ export const MOCK_ERROR_CODES = [
   'INVALID_TRANSITION',
   'VERSION_CONFLICT',
   'ABORTED',
+  'BASE_VERSION_NOT_FOUND',
+  'BASE_VERSION_NOTE_MISMATCH',
+  'IDEMPOTENCY_KEY_REUSED',
+  'VERSION_GRAPH_INVALID',
+  'STATUS_NOT_EDITABLE',
 ] as const
 
 export type MockErrorCode = (typeof MOCK_ERROR_CODES)[number]
@@ -17,6 +24,7 @@ export type MockApiError = {
   readonly status: number
   readonly message: string
   readonly details: Readonly<Record<string, string | number | boolean | null>> | null
+  readonly conflict: VersionConflictResponseDto | null
 }
 
 export function createMockApiError(input: {
@@ -24,6 +32,7 @@ export function createMockApiError(input: {
   readonly status: number
   readonly message: string
   readonly details?: Readonly<Record<string, string | number | boolean | null>> | null
+  readonly conflict?: VersionConflictResponseDto | null
 }): MockApiError {
   return {
     name: 'MockApiError',
@@ -31,6 +40,7 @@ export function createMockApiError(input: {
     status: input.status,
     message: input.message,
     details: input.details ?? null,
+    conflict: input.conflict ?? null,
   }
 }
 

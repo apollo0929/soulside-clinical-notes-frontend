@@ -55,6 +55,7 @@ export {
   mapNoteVersionRefDtoToDomain,
   mapReviewEventDtoToDomain,
   mapSoapContentDtoToDomain,
+  mapSoapContentToDto,
   mapSoapSectionsDtoToDomain,
 } from '@/domain/mappers'
 export type { Note } from '@/domain/models/note'
@@ -88,6 +89,20 @@ export {
   type TransitionEffect,
   type TransitionSource,
 } from '@/domain/note-lifecycle'
+export {
+  type CommonAncestorResult,
+  createVersionLookupFromList,
+  evaluateVersionSavePolicy,
+  type EvaluateVersionSavePolicyInput,
+  findNearestCommonAncestor,
+  getAncestorChain,
+  validateVersionGraph,
+  VERSION_SAVE_DENIAL_REASON_CODES,
+  type VersionGraphIssue,
+  type VersionLookup,
+  type VersionSaveDecision,
+  type VersionSaveDenialReasonCode,
+} from '@/domain/note-version'
 export { USER_ROLES, type UserRole } from '@/domain/roles'
 export {
   type CreateVersionRequestDto,

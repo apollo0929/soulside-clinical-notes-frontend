@@ -152,3 +152,65 @@ copy-validate-commit semantics so failed transitions leave state unchanged.
 **Deferred to later steps:** React notes list UI, TanStack Query hooks, Zustand stores,
 editor/autosave, IndexedDB, offline replay, WebSocket/SSE, presence, telemetry, and
 three-way merge UI.
+
+## Version Creation and Concurrency
+
+Content saves create **immutable** `NoteVersion` rows. The mock never mutates an existing
+version in place. `POST /api/notes/:id/versions` accepts `baseVersionId`, SOAP content, and
+`clientMutationId`.
+
+**baseVersionId check:** the base must exist, belong to the note, and equal
+`note.currentVersionId`. A same-note stale base returns **409** `version_conflict` with the
+current head summary and nearest common ancestor. Silent rebase is not allowed.
+
+**Idempotency:** `clientMutationId` is bound to the first observed request fingerprint
+(operation, noteId, baseVersionId, actor user id, canonical SOAP text). Role and
+`occurredAt` are excluded from the fingerprint. Successful completions are replayed without
+creating another version. A different fingerprint for the same key returns
+`IDEMPOTENCY_KEY_REUSED` (409). Failed attempts (including conflicts) bind the key but do
+not store a successful completion, so the same fingerprint may re-evaluate; a resolved merge
+must use a **new** `clientMutationId`.
+
+**Atomic commit:** version insert, note head/`updatedAt` update, and completed-mutation
+record share one preflight-then-apply database commit (`commitCreateVersion`).
+
+**Revision allocation:** `max(revisions for note) + 1`. Version IDs use a database-scoped
+counter (`ver_generated_000001`, …) reset with the database.
+
+**Common ancestor:** walk parent links from A to root, then walk B until an A ancestor is
+found (single-parent lineages). Cycles / missing parents / cross-note versions are
+`VERSION_GRAPH_INVALID`.
+
+**Content-save policy** (distinct from lifecycle transitions): editable statuses are
+`IN_REVIEW` (assigned reviewer or ADMIN), `REJECTED` and `AMENDED` (owning clinician or
+ADMIN). `READY_FOR_REVIEW`, `GENERATING`, `FAILED`, `APPROVED`, and `LOCKED` deny saves.
+Authorization still requires `NOTE_EDIT` first.
+
+Client autosave coordination and three-way merge UI remain future steps.
+
+```mermaid
+sequenceDiagram
+  participant C as Future client
+  participant H as MSW handler
+  participant S as Create-version service
+  participant I as Idempotency registry
+  participant D as Mock database
+
+  C->>H: POST version
+  H->>S: validated command
+  S->>I: check clientMutationId
+  alt completed identical request
+    I-->>S: prior response
+    S-->>H: replay prior response
+  else new request
+    S->>D: load note and head
+    alt stale base
+      D-->>S: current head
+      S-->>H: VERSION_CONFLICT
+    else current base
+      S->>D: atomic insert version + update head + record mutation
+      D-->>S: committed
+      S-->>H: version response
+    end
+  end
+```

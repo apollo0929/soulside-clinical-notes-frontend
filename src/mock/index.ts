@@ -1,3 +1,4 @@
+export { FixedMockClock, type MockClock } from '@/mock/clock'
 export {
   decodeCursor,
   encodeCursor,
@@ -21,6 +22,12 @@ export {
   mockErrorHttpBody,
 } from '@/mock/errors'
 export { FailureController, type FailureEndpoint } from '@/mock/failure'
+export { buildCreateVersionFingerprint } from '@/mock/idempotency/fingerprint'
+export type {
+  CompletedCreateVersionMutation,
+  CompletedMutationRecord,
+  IdempotencyBinding,
+} from '@/mock/idempotency/types'
 export { LatencyController } from '@/mock/latency'
 export {
   ACTOR_USER_ID_HEADER,
@@ -45,4 +52,9 @@ export {
   type MockBackendOptions,
   MockBackendService,
 } from '@/mock/services/backend'
+export {
+  createNoteVersion,
+  type CreateVersionInput,
+  type CreateVersionResult,
+} from '@/mock/services/create-version'
 export { transitionNote, type TransitionNoteInput } from '@/mock/services/transition'

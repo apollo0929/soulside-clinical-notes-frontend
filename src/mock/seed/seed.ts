@@ -194,7 +194,8 @@ function buildSeedSnapshot(config: SeedConfig, random: DeterministicRandom): Moc
     notes,
     versions,
     reviewEvents,
-    completedMutationIds: [],
+    completedMutations: [],
+    idempotencyBindings: [],
   }
 }
 

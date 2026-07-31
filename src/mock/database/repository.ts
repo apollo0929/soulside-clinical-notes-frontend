@@ -1,4 +1,5 @@
 import type { ClientMutationId, NoteId, PatientId, UserId, VersionId } from '@/domain/ids'
+import { parseVersionId } from '@/domain/ids'
 import type { Note } from '@/domain/models/note'
 import type { NoteVersion } from '@/domain/models/note-version'
 import type { Patient } from '@/domain/models/patient'
@@ -6,6 +7,12 @@ import type { ReviewEvent } from '@/domain/models/review-event'
 import type { SoapContent } from '@/domain/models/soap'
 import type { User } from '@/domain/models/user'
 import { createMockApiError, type MockApiError } from '@/mock/errors'
+import {
+  cloneCompletedMutation,
+  cloneIdempotencyBinding,
+  type CompletedMutationRecord,
+  type IdempotencyBinding,
+} from '@/mock/idempotency/types'
 
 function freezeSoap(content: SoapContent): SoapContent {
   return Object.freeze({
@@ -54,7 +61,8 @@ export type MockDatabaseSnapshot = {
   readonly notes: readonly Note[]
   readonly versions: readonly NoteVersion[]
   readonly reviewEvents: readonly ReviewEvent[]
-  readonly completedMutationIds: readonly ClientMutationId[]
+  readonly completedMutations: readonly CompletedMutationRecord[]
+  readonly idempotencyBindings: readonly IdempotencyBinding[]
 }
 
 /**
@@ -69,7 +77,9 @@ export class MockDatabase {
   private readonly versionIdsByNoteId = new Map<NoteId, VersionId[]>()
   private readonly reviewEventsByNoteId = new Map<NoteId, ReviewEvent[]>()
   private readonly reviewEventsById = new Map<string, ReviewEvent>()
-  private readonly completedMutations = new Map<ClientMutationId, unknown>()
+  private readonly completedMutations = new Map<ClientMutationId, CompletedMutationRecord>()
+  private readonly idempotencyBindings = new Map<ClientMutationId, IdempotencyBinding>()
+  private versionSequence = 0
 
   reset(): void {
     this.usersById.clear()
@@ -80,6 +90,8 @@ export class MockDatabase {
     this.reviewEventsByNoteId.clear()
     this.reviewEventsById.clear()
     this.completedMutations.clear()
+    this.idempotencyBindings.clear()
+    this.versionSequence = 0
   }
 
   replaceAll(snapshot: MockDatabaseSnapshot): void {
@@ -99,9 +111,25 @@ export class MockDatabase {
     for (const event of snapshot.reviewEvents) {
       this.appendReviewEvent(event)
     }
-    for (const mutationId of snapshot.completedMutationIds) {
-      this.saveCompletedMutation(mutationId, { ok: true })
+    for (const mutation of snapshot.completedMutations) {
+      this.saveCompletedMutation(mutation)
     }
+    for (const binding of snapshot.idempotencyBindings) {
+      this.bindIdempotencyKey(binding)
+    }
+  }
+
+  /**
+   * Deterministic version ID allocation scoped to this database instance.
+   * Reset clears the counter. Seeded IDs use a different prefix and do not collide.
+   */
+  allocateVersionId(): VersionId {
+    this.versionSequence += 1
+    return parseVersionId(`ver_generated_${String(this.versionSequence).padStart(6, '0')}`)
+  }
+
+  peekNextVersionSequence(): number {
+    return this.versionSequence + 1
   }
 
   getUser(id: UserId): User | null {
@@ -247,22 +275,99 @@ export class MockDatabase {
     })
   }
 
-  getCompletedMutation(id: ClientMutationId): unknown | null {
-    if (!this.completedMutations.has(id)) {
-      return null
-    }
+  getCompletedMutation(id: ClientMutationId): CompletedMutationRecord | null {
     const value = this.completedMutations.get(id)
-    if (value === null || typeof value !== 'object') {
-      return value ?? null
-    }
-    return Object.freeze({ ...(value as Record<string, unknown>) })
+    return value ? cloneCompletedMutation(value) : null
   }
 
-  saveCompletedMutation(id: ClientMutationId, value: unknown): void {
-    if (this.completedMutations.has(id)) {
-      throw duplicateError('CompletedMutation', id)
+  saveCompletedMutation(record: CompletedMutationRecord): void {
+    if (this.completedMutations.has(record.clientMutationId)) {
+      throw duplicateError('CompletedMutation', record.clientMutationId)
     }
-    this.completedMutations.set(id, value)
+    this.completedMutations.set(record.clientMutationId, cloneCompletedMutation(record))
+  }
+
+  getIdempotencyBinding(id: ClientMutationId): IdempotencyBinding | null {
+    const binding = this.idempotencyBindings.get(id)
+    return binding ? cloneIdempotencyBinding(binding) : null
+  }
+
+  /**
+   * Binds a clientMutationId to its first observed fingerprint.
+   * No-op if already bound to the same fingerprint; throws on reuse with a different fingerprint.
+   */
+  bindIdempotencyKey(binding: IdempotencyBinding): void {
+    const existing = this.idempotencyBindings.get(binding.clientMutationId)
+    if (existing) {
+      if (existing.fingerprint !== binding.fingerprint) {
+        throw createMockApiError({
+          code: 'IDEMPOTENCY_KEY_REUSED',
+          status: 409,
+          message: 'clientMutationId was already used with a different request fingerprint.',
+          details: { clientMutationId: binding.clientMutationId },
+        })
+      }
+      return
+    }
+    this.idempotencyBindings.set(binding.clientMutationId, cloneIdempotencyBinding(binding))
+  }
+
+  /**
+   * Atomically inserts a new version, updates the note head, and records a completed mutation.
+   */
+  commitCreateVersion(input: {
+    readonly note: Note
+    readonly version: NoteVersion
+    readonly mutation: CompletedMutationRecord
+  }): void {
+    if (!this.notesById.has(input.note.id)) {
+      throw createMockApiError({
+        code: 'NOT_FOUND',
+        status: 404,
+        message: `Note ${input.note.id} was not found.`,
+      })
+    }
+    if (this.versionsById.has(input.version.id)) {
+      throw duplicateError('NoteVersion', input.version.id)
+    }
+    if (this.completedMutations.has(input.mutation.clientMutationId)) {
+      throw duplicateError('CompletedMutation', input.mutation.clientMutationId)
+    }
+    if (input.version.noteId !== input.note.id) {
+      throw createMockApiError({
+        code: 'INVALID_REQUEST',
+        status: 400,
+        message: 'Version noteId must match the updated note.',
+      })
+    }
+    if (input.note.currentVersionId !== input.version.id) {
+      throw createMockApiError({
+        code: 'INVALID_REQUEST',
+        status: 400,
+        message: 'Updated note.currentVersionId must equal the new version id.',
+      })
+    }
+
+    const existingIds = this.versionIdsByNoteId.get(input.version.noteId) ?? []
+    for (const existingId of existingIds) {
+      const existing = this.versionsById.get(existingId)
+      if (existing && existing.revisionNumber === input.version.revisionNumber) {
+        throw createMockApiError({
+          code: 'INVALID_REQUEST',
+          status: 400,
+          message: `Note ${input.version.noteId} already has revision ${input.version.revisionNumber}.`,
+        })
+      }
+    }
+
+    const frozenVersion = cloneVersion(input.version)
+    this.versionsById.set(input.version.id, frozenVersion)
+    this.versionIdsByNoteId.set(input.version.noteId, [...existingIds, input.version.id])
+    this.notesById.set(input.note.id, cloneNote(input.note))
+    this.completedMutations.set(
+      input.mutation.clientMutationId,
+      cloneCompletedMutation(input.mutation),
+    )
   }
 
   /**

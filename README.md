@@ -138,8 +138,33 @@ Unit tests should call `configureForTests()` so runs stay fast and deterministic
 - `GET /api/notes/:id`
 - `POST /api/dev/seed`
 - `POST /api/notes/:id/transitions`
+- `POST /api/notes/:id/versions`
 
-See `docs/architecture.md` (Dummy Backend) for cursor design, sorting, and authorization.
+### Create version
+
+```http
+POST /api/notes/:id/versions
+x-user-id: usr_...
+x-user-role: REVIEWER
+Content-Type: application/json
+
+{
+  "baseVersionId": "ver_...",
+  "content": { "sections": { "S": "...", "O": "...", "A": "...", "P": "..." } },
+  "clientMutationId": "mut_..."
+}
+```
+
+- Success **200** returns `{ version: { id, revision, parentVersionId } }`.
+- Stale `baseVersionId` returns **409** with the existing `version_conflict` body.
+- Reusing `clientMutationId` with the same fingerprint replays the prior success.
+- Reusing the key with a different fingerprint returns **409** `IDEMPOTENCY_KEY_REUSED`.
+
+Tests use `MockBackendService`’s fixed clock (`setNow` / `clock.now()`). Application
+services never call `Date.now()`.
+
+See `docs/architecture.md` (Dummy Backend / Version Creation) for cursor design, sorting,
+authorization, and concurrency semantics.
 
 Unit tests cover branded IDs, status/role enums, SOAP and API DTO schemas, DTO→domain
 mappers, lifecycle, authorization, and the dummy backend.

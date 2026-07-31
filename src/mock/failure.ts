@@ -2,7 +2,12 @@ import { createMockApiError, type MockApiError } from '@/mock/errors'
 import type { DeterministicRandom } from '@/mock/prng'
 
 export type FailureEndpoint =
-  'notes.list' | 'notes.detail' | 'notes.transition' | 'dev.seed' | 'default'
+  | 'notes.list'
+  | 'notes.detail'
+  | 'notes.transition'
+  | 'notes.createVersion'
+  | 'dev.seed'
+  | 'default'
 
 export type FailureControllerOptions = {
   readonly random: DeterministicRandom

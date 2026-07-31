@@ -2,7 +2,12 @@ import { authorize } from '@/domain/authorization'
 import type { IsoDateTime } from '@/domain/datetime'
 import { parseIsoDateTime } from '@/domain/datetime'
 import type { NoteId } from '@/domain/ids'
-import type { NoteDetailDto, NotesListResponseDto } from '@/domain/schemas'
+import type {
+  CreateVersionSuccessResponseDto,
+  NoteDetailDto,
+  NotesListResponseDto,
+} from '@/domain/schemas'
+import { FixedMockClock, type MockClock } from '@/mock/clock'
 import type { NoteListSortDirection, NoteListSortField } from '@/mock/cursor'
 import { MockDatabase } from '@/mock/database/repository'
 import { createMockApiError, isMockApiError, type MockApiError } from '@/mock/errors'
@@ -10,6 +15,7 @@ import { FailureController } from '@/mock/failure'
 import { LatencyController } from '@/mock/latency'
 import { createMulberry32 } from '@/mock/prng'
 import { DEFAULT_SEED_CONFIG, seedMockDatabase, type SeedResult } from '@/mock/seed/seed'
+import { createNoteVersion, type CreateVersionInput } from '@/mock/services/create-version'
 import { getNoteDetailFromDatabase } from '@/mock/services/note-detail'
 import {
   DEFAULT_NOTES_LIST_LIMIT,
@@ -29,6 +35,7 @@ export type MockBackendOptions = {
   readonly failureSeed?: number
   readonly autoSeed?: boolean
   readonly now?: IsoDateTime
+  readonly clock?: MockClock
 }
 
 export type ListNotesServiceInput = {
@@ -49,6 +56,10 @@ export type DevSeedServiceInput = {
   readonly signal?: AbortSignal
 }
 
+export type CreateVersionServiceInput = CreateVersionInput & {
+  readonly signal?: AbortSignal
+}
+
 /**
  * Transport-independent mock backend application service.
  */
@@ -56,7 +67,8 @@ export class MockBackendService {
   readonly database: MockDatabase
   readonly latency: LatencyController
   readonly failures: FailureController
-  private now: IsoDateTime
+  readonly clock: MockClock
+  private readonly fixedClock: FixedMockClock | null
 
   constructor(options: MockBackendOptions = {}) {
     this.database = new MockDatabase()
@@ -64,7 +76,16 @@ export class MockBackendService {
     const failureRandom = createMulberry32(options.failureSeed ?? 11)
     this.latency = LatencyController.createDefault(latencyRandom)
     this.failures = new FailureController({ random: failureRandom, defaultRate: 0.05 })
-    this.now = options.now ?? parseIsoDateTime('2024-07-01T00:00:00.000Z')
+
+    if (options.clock) {
+      this.clock = options.clock
+      this.fixedClock = null
+    } else {
+      this.fixedClock = new FixedMockClock(
+        options.now ?? parseIsoDateTime('2024-07-01T00:00:00.000Z'),
+      )
+      this.clock = this.fixedClock
+    }
 
     if (options.autoSeed !== false) {
       seedMockDatabase(this.database, {
@@ -75,7 +96,11 @@ export class MockBackendService {
   }
 
   setNow(now: IsoDateTime): void {
-    this.now = now
+    if (this.fixedClock) {
+      this.fixedClock.set(now)
+      return
+    }
+    throw new Error('setNow is only supported when using the default FixedMockClock')
   }
 
   /** Test helper: disable latency and failure injection. */
@@ -103,7 +128,7 @@ export class MockBackendService {
         })
       }
 
-      const result = listNotesFromDatabase(this.database, input.request, this.now)
+      const result = listNotesFromDatabase(this.database, input.request, this.clock.now())
       return result.ok ? result.response : result.error
     } catch (error) {
       return toMockError(error)
@@ -180,6 +205,26 @@ export class MockBackendService {
       this.failures.maybeInject('notes.transition')
       const result = transitionNote(this.database, input)
       return result.ok ? result.value : result.error
+    } catch (error) {
+      return toMockError(error)
+    }
+  }
+
+  async createVersion(
+    input: CreateVersionServiceInput,
+  ): Promise<CreateVersionSuccessResponseDto | MockApiError> {
+    try {
+      await this.latency.wait({ signal: input.signal })
+      this.failures.maybeInject('notes.createVersion')
+      const result = createNoteVersion(this.database, {
+        actor: input.actor,
+        noteId: input.noteId,
+        baseVersionId: input.baseVersionId,
+        content: input.content,
+        clientMutationId: input.clientMutationId,
+        occurredAt: input.occurredAt,
+      })
+      return result.ok ? result.response : result.error
     } catch (error) {
       return toMockError(error)
     }
