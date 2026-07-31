@@ -76,14 +76,73 @@ src/
   features/     Feature modules (later steps)
   services/     External/service adapters (later steps)
   shared/       Shared UI, hooks, utils
-  mock/         Mock data/APIs (later steps)
+  mock/         Deterministic dummy backend (MSW + in-memory services)
   test/         Test setup, fixtures, helpers
 e2e/            Playwright tests
 docs/           Design notes
 scripts/        Maintenance scripts
 ```
 
-Unit tests cover branded IDs, status/role enums, SOAP and API DTO schemas, and DTO→domain mappers.
+## Dummy backend (local simulation)
+
+The backend under `src/mock` is a **deterministic local simulation** for development and
+tests. It is not a real network service.
+
+### Seeding
+
+Admin-only development seed (MSW):
+
+```http
+POST /api/dev/seed
+x-user-id: usr_admin_<seed>
+x-user-role: ADMIN
+Content-Type: application/json
+
+{ "count": 5000, "seed": 12345 }
+```
+
+Programmatically:
+
+```ts
+import { MockDatabase, seedMockDatabase } from '@/mock'
+
+const db = new MockDatabase()
+seedMockDatabase(db, { seed: 12345, noteCount: 5000 })
+```
+
+### Test actor headers
+
+Protected endpoints require:
+
+- `x-user-id` — branded user id string
+- `x-user-role` — `CLINICIAN` | `REVIEWER` | `ADMIN` | `READONLY_AUDITOR`
+
+There is no real authentication.
+
+### Latency and failure controls
+
+On a `MockBackendService` instance:
+
+```ts
+backend.configureForTests() // latency 0, failure rate 0
+backend.latency.setRange(100, 800)
+backend.failures.setDefaultRate(0.05)
+backend.failures.forceAlways()
+```
+
+Unit tests should call `configureForTests()` so runs stay fast and deterministic.
+
+### Endpoints (MSW)
+
+- `GET /api/notes`
+- `GET /api/notes/:id`
+- `POST /api/dev/seed`
+- `POST /api/notes/:id/transitions`
+
+See `docs/architecture.md` (Dummy Backend) for cursor design, sorting, and authorization.
+
+Unit tests cover branded IDs, status/role enums, SOAP and API DTO schemas, DTO→domain
+mappers, lifecycle, authorization, and the dummy backend.
 
 ## License
 

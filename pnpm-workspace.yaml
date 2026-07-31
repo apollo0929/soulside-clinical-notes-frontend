@@ -1,0 +1,3 @@
+# Single-package workspace settings for pnpm 11+ build-script policy.
+allowBuilds:
+  msw: false

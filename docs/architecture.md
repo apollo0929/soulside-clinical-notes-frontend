@@ -100,3 +100,55 @@ flowchart LR
   L -->|allowed| API[Future API request]
   API --> SERVER[Server authorization and transition validation]
 ```
+
+## Dummy Backend
+
+The Step 4 dummy backend is a **deterministic local simulation**, not a real API. Core
+application services live under `src/mock` and are transport-independent: MSW (or any
+HTTP adapter) parses requests, calls a typed service, and maps `MockApiError` values to
+HTTP responses. Business rules are not embedded in handlers.
+
+```mermaid
+flowchart LR
+  Client[Future API client] --> MSW[MSW handlers]
+  MSW --> Service[Mock backend service]
+  Service --> Auth[Authorization policy]
+  Service --> Machine[Lifecycle machine]
+  Service --> Repo[In-memory repositories]
+  Repo --> DB[(Normalized mock state)]
+```
+
+**Repositories** keep normalized Maps privately (`users`, `patients`, `notes`,
+`note versions`, `review events`, `completed mutations`). Callers receive frozen clones.
+`NoteVersion` and `ReviewEvent` rows are append-only; update helpers reject mutations.
+
+**Deterministic seed** uses Mulberry32 (no `Math.random`). The same `SeedConfig` always
+yields the same IDs, statuses, timestamps, patient names, assignments, and version graphs.
+Defaults are small; `noteCount` may be set to 5,000 or up to 100,000 for scale exercises.
+Integrity validation runs after seed in development/test mode.
+
+**Cursor pagination** encodes opaque base64url JSON (`sort`, `dir`, primary value, note id,
+query fingerprint). Cursors are validated at decode time and rejected when they do not
+match the current sort/filter fingerprint. Offsets and page numbers are not exposed.
+
+**Listing** supports status multi-select, assigned reviewer, patient id, inclusive
+`updatedAt` date bounds (`dateFrom`/`dateTo`), case-insensitive substring search over
+patient display name and current SOAP text, and stable sorting (`updatedAt`, `createdAt`,
+`patientDisplayName`, `status`) with note id as the secondary key.
+
+**Latency and failure** controllers are centralized (`LatencyController`,
+`FailureController`) with injectable PRNG sources. Tests disable both (0 ms / 0%).
+Aborted waits reject as typed `ABORTED`.
+
+**Server authorization** requires an explicit `ActorContext` (`x-user-id` /
+`x-user-role` at the MSW edge). List requires `NOTES_VIEW`; detail requires
+`NOTE_CONTENT_VIEW` with note resource context; `POST /api/dev/seed` requires
+`ADMIN_SIMULATION_CONTROL`.
+
+**Lifecycle reuse:** `transitionNote` calls the existing `evaluateNoteTransition` machine,
+applies declarative effects, appends one `ReviewEvent` on success, and uses
+copy-validate-commit semantics so failed transitions leave state unchanged.
+
+**Deferred to later steps:** React notes list UI, TanStack Query hooks, Zustand stores,
+editor/autosave, IndexedDB, offline replay, WebSocket/SSE, presence, telemetry, and
+three-way merge UI.
