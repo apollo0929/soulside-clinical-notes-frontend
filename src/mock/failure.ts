@@ -6,6 +6,8 @@ export type FailureEndpoint =
   | 'notes.detail'
   | 'notes.transition'
   | 'notes.createVersion'
+  | 'notes.bulkAssign'
+  | 'notes.bulkRegenerate'
   | 'dev.seed'
   | 'default'
 

@@ -305,6 +305,10 @@ function primarySortValue(
   }
 }
 
+export function buildNotesListItemDto(note: Note, db: MockDatabase): NotesListItemDto {
+  return toListItemDto(note, db)
+}
+
 function toListItemDto(note: Note, db: MockDatabase): NotesListItemDto {
   const patient = db.getPatient(note.patientId)
   if (!patient) {

@@ -77,9 +77,11 @@ describe('createNoteVersion', () => {
       ;(result.response.version as { revision: number }).revision = -1
     }).toThrow()
     expect(result.response.version.revision).toBe(maxRevision + 1)
-    expect(
-      db.getCompletedMutation(parseClientMutationId('mut_success_1'))?.response.version.revision,
-    ).toBe(maxRevision + 1)
+    const completed = db.getCompletedMutation(parseClientMutationId('mut_success_1'))
+    expect(completed?.operation).toBe('CREATE_NOTE_VERSION')
+    if (completed?.operation === 'CREATE_NOTE_VERSION') {
+      expect(completed.response.version.revision).toBe(maxRevision + 1)
+    }
 
     const updated = db.getNote(note.id)!
     expect(updated.currentVersionId).toBe(result.response.version.id)

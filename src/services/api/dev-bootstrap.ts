@@ -25,6 +25,9 @@ export function ensureDevMockBackend(): Promise<void> {
       quiet: true,
     })
 
+    const { installDevActorApi } = await import('@/services/api/actor-provider')
+    installDevActorApi()
+
     const response = await fetch('/api/dev/seed', {
       method: 'POST',
       headers: {

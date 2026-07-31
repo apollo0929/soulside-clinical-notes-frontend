@@ -39,6 +39,8 @@ Opens the Vite development server (default `http://localhost:5173`).
 In development, the app bootstraps the MSW mock backend once and seeds the default
 dataset (`seed: 42`, `noteCount: 48`) via `POST /api/dev/seed`. The active list actor is
 the fixed reviewer `usr_reviewer_42_0` (headers via the API client actor provider).
+Bulk assign/regenerate require the ADMIN actor (`usr_admin_42`); in DEV the actor
+API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
 
 ### Notes list
 
@@ -47,8 +49,12 @@ the fixed reviewer `usr_reviewer_42_0` (headers via the API client actor provide
   - `/notes?status=APPROVED,IN_REVIEW`
   - `/notes?q=avery&sort=patientDisplayName&direction=asc`
   - `/notes?reviewer=usr_reviewer_42_0&from=2024-06-01T00:00:00.000Z`
-- Focused unit tests: `pnpm test -- src/features/notes-list src/services/api`
-- Playwright smoke: `pnpm test:e2e -- e2e/notes-list.spec.ts`
+- Selection is page-local (not URL). “Select all” covers loaded visible rows only.
+- Bulk assign (ADMIN): sets reviewer without changing status; partial success supported.
+- Bulk regenerate (ADMIN): `FAILED → GENERATING` via lifecycle; partial success supported.
+- Failed items stay selected; successful items are deselected.
+- Focused unit tests: `pnpm test -- src/features/notes-list src/services/api src/mock/services/bulk-actions.test.ts`
+- Playwright: `pnpm test:e2e -- e2e/notes-list.spec.ts e2e/notes-bulk.spec.ts`
 
 ## Scripts
 
@@ -153,6 +159,8 @@ Unit tests should call `configureForTests()` so runs stay fast and deterministic
 - `POST /api/dev/seed`
 - `POST /api/notes/:id/transitions`
 - `POST /api/notes/:id/versions`
+- `POST /api/notes/bulk/assign-reviewer`
+- `POST /api/notes/bulk/regenerate`
 
 ### Create version
 

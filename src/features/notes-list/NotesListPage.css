@@ -137,7 +137,7 @@
 
 .notes-list-skeleton__row {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 0.5fr 1fr 1fr 1fr;
+  grid-template-columns: 2.5rem 1.4fr 1fr 0.5fr 1fr 1fr 1fr;
   gap: 0.5rem;
 }
 
@@ -190,12 +190,102 @@
 
 .notes-virtual__row {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 0.5fr 1fr 1fr 1fr;
+  grid-template-columns: 2.5rem 1.4fr 1fr 0.5fr 1fr 1fr 1fr;
   gap: 0.5rem;
   align-items: center;
   padding: 0 0.75rem;
   box-sizing: border-box;
   border-bottom: 1px solid #ecece8;
+}
+
+.notes-virtual__cell--check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-virtual__check-label {
+  display: inline-flex;
+  margin: 0;
+}
+
+.bulk-action-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #d8d8d4;
+  border-radius: 0.25rem;
+  background: #f8f8f5;
+}
+
+.bulk-action-toolbar__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.bulk-action-toolbar__header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.bulk-action-toolbar__count {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.bulk-action-toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.bulk-action-toolbar__controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.bulk-action-toolbar__controls select,
+.bulk-action-toolbar__controls button {
+  font: inherit;
+  font-weight: 400;
+}
+
+.bulk-action-toolbar__controls select {
+  min-width: 12rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #bdbdb8;
+  border-radius: 0.25rem;
+  background: #fff;
+}
+
+.bulk-action-toolbar__controls button {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid #8a8a84;
+  border-radius: 0.25rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.bulk-action-toolbar__controls button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bulk-action-toolbar__error {
+  border-left: 3px solid #b00020;
+  padding-left: 0.75rem;
+}
+
+.bulk-action-toolbar__error p {
+  margin: 0;
 }
 
 .notes-virtual__row--header {

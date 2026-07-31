@@ -198,8 +198,82 @@ the requested sort plus note id as a stable secondary key.
 
 **Memory bound:** Only loaded cursor pages stay in memory/DOM — not the full 100k corpus.
 
-**Deferred to Step 6B+:** row selection, bulk actions, note detail, SOAP editor, autosave,
-conflict UI, IndexedDB/offline, realtime, presence, telemetry, and authentication UI.
+**Deferred after Step 6B:** note detail, SOAP editor, autosave, conflict UI,
+IndexedDB/offline, realtime, presence, telemetry, and authentication UI.
+
+## Notes List Mutations
+
+Selection is **page-local React reducer state** (`selectedIds: ReadonlySet<NoteId>`).
+It is not stored in the URL, TanStack Query cache, mock backend, or Zustand.
+
+**Visible selection:** “Select all” applies only to currently loaded filtered rows,
+not the full backend corpus. Newly loaded cursor pages are not auto-selected.
+The header checkbox uses native `indeterminate` when the visible set is partially
+selected.
+
+**Filter-change pruning:** After a replacement list query successfully loads its
+first page (and is not mid-fetch), selection is pruned to IDs present in the
+currently loaded rows. Sorting alone preserves selection when the same IDs remain.
+Selection is not cleared during the loading gap to avoid flicker.
+
+**Partial-success batch model:** Each note mutation is atomic. The overall batch
+supports partial success — one note failure does not roll back other successful
+notes. Idempotency stores the final entire batch response after all item operations
+complete. The in-memory mock does **not** implement global multi-note rollback if
+completed-response storage fails; under normal operation that write succeeds.
+
+**Assignment policy (status unchanged):**
+
+| Status           | Who may assign   |
+| ---------------- | ---------------- |
+| READY_FOR_REVIEW | ADMIN            |
+| IN_REVIEW        | ADMIN (reassign) |
+| AMENDED          | ADMIN            |
+| Other            | denied           |
+
+Request-wide permission: `NOTE_BULK_ASSIGN_REVIEWER` (ADMIN). Per-note also checks
+`NOTE_ASSIGN_REVIEWER`. Assigning a reviewer does **not** transition
+`READY_FOR_REVIEW` → `IN_REVIEW`. No `ReviewEvent` is appended for assignment
+because status does not change; a richer audit-action model would be added in
+production.
+
+**Regeneration:** Request-wide `NOTE_BULK_REGENERATE` (ADMIN). Each item calls the
+existing `transitionNote` service with `REGENERATE` / `USER`. Successful
+`FAILED → GENERATING` appends one `ReviewEvent`. Non-FAILED notes fail per-item.
+
+**Idempotency:** `clientMutationId` with operation-specific fingerprints
+(`BULK_ASSIGN_REVIEWER`, `BULK_REGENERATE`). Note IDs are sorted before
+fingerprinting. Identical retries replay the stored batch response. Same key with
+a different fingerprint is rejected (`IDEMPOTENCY_KEY_REUSED`). Keys do not collide
+with `CREATE_NOTE_VERSION`.
+
+**Optimistic cache strategy:** Snapshot selected notes from the active infinite
+query. Assign patches `assignedReviewer` immediately and preserves existing
+`updatedAt` until the server response. Regenerate patches only selected rows whose
+loaded status is `FAILED` to `GENERATING`. Request-wide failure restores the full
+snapshot. Partial success applies returned summaries for successes and restores
+failures from the snapshot. Successful IDs are removed from selection; failed IDs
+remain selected. Active list queries are invalidated after settlement without
+clearing rendered pages first.
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant UI as Bulk toolbar
+  participant Q as TanStack Query cache
+  participant API as Bulk API
+  participant S as Mock service
+
+  U->>UI: Submit selected notes
+  UI->>Q: Snapshot + optimistic patch
+  UI->>API: Bulk mutation
+  API->>S: Validated request
+  S-->>API: Per-item results
+  API-->>UI: Success + failures
+  UI->>Q: Apply success / rollback failures
+  UI->>Q: Invalidate relevant lists
+  UI-->>U: Announce counts
+```
 
 ## Version Creation and Concurrency
 

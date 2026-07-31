@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useRef } from 'react'
 
+import type { NoteId } from '@/domain/ids'
 import type { NoteSummary } from '@/domain/models/note-summary'
 import type { NotesListSortField } from '@/services/api/notes-api'
 
@@ -15,6 +16,12 @@ export type NotesVirtualListProps = {
   readonly hasNextPage: boolean
   readonly isFetchingNextPage: boolean
   readonly onLoadMore: () => void
+  readonly selectedIds: ReadonlySet<NoteId>
+  readonly selectAllState: 'checked' | 'unchecked' | 'indeterminate'
+  readonly onToggleRow: (noteId: NoteId) => void
+  readonly onToggleSelectAll: () => void
+  readonly pendingIds: ReadonlySet<NoteId>
+  readonly selectionDisabled: boolean
 }
 
 function formatTimestamp(value: string): string {
@@ -40,13 +47,28 @@ export function NotesVirtualList({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  selectedIds,
+  selectAllState,
+  onToggleRow,
+  onToggleSelectAll,
+  pendingIds,
+  selectionDisabled,
 }: NotesVirtualListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const onLoadMoreRef = useRef(onLoadMore)
+  const selectAllRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     onLoadMoreRef.current = onLoadMore
   }, [onLoadMore])
+
+  useEffect(() => {
+    const node = selectAllRef.current
+    if (!node) {
+      return
+    }
+    node.indeterminate = selectAllState === 'indeterminate'
+  }, [selectAllState])
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -58,8 +80,6 @@ export function NotesVirtualList({
   const virtualItems = virtualizer.getVirtualItems()
   const lastVirtualIndex = virtualItems[virtualItems.length - 1]?.index
 
-  // Depend on the scalar last index — not the virtualItems array identity —
-  // and call through a ref so unstable parent callbacks cannot re-fire fetches.
   useEffect(() => {
     if (lastVirtualIndex === undefined) {
       return
@@ -85,6 +105,23 @@ export function NotesVirtualList({
               aria-rowindex={1}
               className="notes-virtual__row notes-virtual__row--header"
             >
+              <div role="columnheader" className="notes-virtual__cell notes-virtual__cell--check">
+                <label htmlFor="notes-select-all" className="notes-virtual__check-label">
+                  <input
+                    ref={selectAllRef}
+                    id="notes-select-all"
+                    type="checkbox"
+                    checked={selectAllState === 'checked'}
+                    onChange={onToggleSelectAll}
+                    disabled={selectionDisabled || rows.length === 0}
+                    aria-label="Select all visible notes"
+                    aria-checked={
+                      selectAllState === 'indeterminate' ? 'mixed' : selectAllState === 'checked'
+                    }
+                  />
+                  <span className="visually-hidden">Select all visible notes</span>
+                </label>
+              </div>
               <SortableHeader
                 label="Patient"
                 field="patientDisplayName"
@@ -132,6 +169,8 @@ export function NotesVirtualList({
               if (!note) {
                 return null
               }
+              const checkboxId = `note-select-${note.id}`
+              const isPending = pendingIds.has(note.id)
               return (
                 <div
                   key={note.id}
@@ -139,6 +178,7 @@ export function NotesVirtualList({
                   aria-rowindex={virtualRow.index + 2}
                   className="notes-virtual__row"
                   data-note-id={note.id}
+                  aria-selected={selectedIds.has(note.id)}
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -148,6 +188,20 @@ export function NotesVirtualList({
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
+                  <div role="cell" className="notes-virtual__cell notes-virtual__cell--check">
+                    <label htmlFor={checkboxId} className="notes-virtual__check-label">
+                      <input
+                        id={checkboxId}
+                        type="checkbox"
+                        checked={selectedIds.has(note.id)}
+                        onChange={() => {
+                          onToggleRow(note.id)
+                        }}
+                        disabled={selectionDisabled || isPending}
+                        aria-label={`Select note for ${note.patientDisplayName} (${note.id})`}
+                      />
+                    </label>
+                  </div>
                   <div role="cell" className="notes-virtual__cell">
                     <span className="notes-virtual__patient">{note.patientDisplayName}</span>
                     <span className="notes-virtual__note-id">{note.id}</span>
@@ -155,6 +209,7 @@ export function NotesVirtualList({
                   <div role="cell" className="notes-virtual__cell">
                     <span className={`notes-status notes-status--${note.status.toLowerCase()}`}>
                       {note.status.replaceAll('_', ' ')}
+                      {isPending ? ' (Updating)' : null}
                     </span>
                   </div>
                   <div role="cell" className="notes-virtual__cell">

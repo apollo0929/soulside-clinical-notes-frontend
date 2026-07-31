@@ -1,3 +1,4 @@
+import { NOTE_STATUSES, type NoteStatus } from '@/domain/statuses'
 import type { NotesListFilters } from '@/features/notes-list/notes-list.types'
 
 export type NotesListQueryKeyInput = {
@@ -11,6 +12,12 @@ export type NotesListQueryKeyInput = {
   readonly sortDirection: NotesListFilters['sortDirection']
 }
 
+const STATUS_ORDER = new Map(NOTE_STATUSES.map((status, index) => [status, index]))
+
+function orderStatuses(statuses: readonly NoteStatus[]): NoteStatus[] {
+  return [...statuses].sort((a, b) => (STATUS_ORDER.get(a) ?? 0) - (STATUS_ORDER.get(b) ?? 0))
+}
+
 /**
  * Stable query-key factory. Cursor is a pageParam, not part of the base list key.
  * Statuses are copied into a sorted tuple so object identity does not matter.
@@ -22,7 +29,7 @@ export const notesKeys = {
     [
       ...notesKeys.lists(),
       {
-        statuses: [...input.statuses],
+        statuses: orderStatuses(input.statuses),
         assignedReviewerId: input.assignedReviewerId,
         patientId: input.patientId,
         dateFrom: input.dateFrom,

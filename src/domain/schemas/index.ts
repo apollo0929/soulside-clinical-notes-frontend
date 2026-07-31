@@ -1,4 +1,17 @@
 export {
+  type BulkAssignItemResultDto,
+  type BulkAssignReviewerRequestDto,
+  bulkAssignReviewerRequestDtoSchema,
+  type BulkAssignReviewerResponseDto,
+  bulkAssignReviewerResponseDtoSchema,
+  type BulkRegenerateItemResultDto,
+  type BulkRegenerateRequestDto,
+  bulkRegenerateRequestDtoSchema,
+  type BulkRegenerateResponseDto,
+  bulkRegenerateResponseDtoSchema,
+  MAX_BULK_NOTE_IDS,
+} from '@/domain/schemas/bulk-actions'
+export {
   type ActorRefDto,
   actorRefDtoSchema,
   assignedReviewerDtoSchema,

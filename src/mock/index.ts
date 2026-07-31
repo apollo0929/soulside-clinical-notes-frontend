@@ -24,9 +24,15 @@ export {
 export { FailureController, type FailureEndpoint } from '@/mock/failure'
 export { buildCreateVersionFingerprint } from '@/mock/idempotency/fingerprint'
 export type {
+  CompletedBulkAssignMutation,
+  CompletedBulkRegenerateMutation,
   CompletedCreateVersionMutation,
   CompletedMutationRecord,
   IdempotencyBinding,
+} from '@/mock/idempotency/types'
+export {
+  buildBulkAssignFingerprint,
+  buildBulkRegenerateFingerprint,
 } from '@/mock/idempotency/types'
 export { LatencyController } from '@/mock/latency'
 export {

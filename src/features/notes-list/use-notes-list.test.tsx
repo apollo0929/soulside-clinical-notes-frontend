@@ -79,6 +79,16 @@ describe('useNotesList', () => {
     expect(base).not.toEqual(filtered)
     expect(JSON.stringify(base)).not.toContain('cursor')
     expect(JSON.stringify(filtered)).not.toContain('cursor')
+
+    const unsorted = notesKeys.list({
+      ...DEFAULT_NOTES_LIST_FILTERS,
+      statuses: ['APPROVED', 'FAILED'],
+    })
+    const sorted = notesKeys.list({
+      ...DEFAULT_NOTES_LIST_FILTERS,
+      statuses: ['FAILED', 'APPROVED'],
+    })
+    expect(unsorted).toEqual(sorted)
   })
 
   it('27–28: previous rows remain and ids stay unique across pages', async () => {

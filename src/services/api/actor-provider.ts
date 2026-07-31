@@ -47,6 +47,31 @@ export function resetActorIdentity(): void {
   currentActor = DEFAULT_DEV_REVIEWER_ACTOR
 }
 
+/**
+ * DEV/test hook for switching the mock actor without authentication UI.
+ * Installed on globalThis in development bootstrap for Playwright.
+ */
+export type SoulsideActorApi = {
+  setActorIdentity: typeof setActorIdentity
+  getActorIdentity: typeof getActorIdentity
+  resetActorIdentity: typeof resetActorIdentity
+  DEFAULT_DEV_ADMIN_ACTOR: typeof DEFAULT_DEV_ADMIN_ACTOR
+  DEFAULT_DEV_REVIEWER_ACTOR: typeof DEFAULT_DEV_REVIEWER_ACTOR
+}
+
+export function installDevActorApi(): void {
+  const target = globalThis as typeof globalThis & {
+    __SOULSIDE_ACTOR__?: SoulsideActorApi
+  }
+  target.__SOULSIDE_ACTOR__ = {
+    setActorIdentity,
+    getActorIdentity,
+    resetActorIdentity,
+    DEFAULT_DEV_ADMIN_ACTOR,
+    DEFAULT_DEV_REVIEWER_ACTOR,
+  }
+}
+
 export function getActorHeaders(): Record<string, string> {
   const actor = getActorIdentity()
   return {

@@ -16,6 +16,7 @@ export function NotesListSkeleton() {
           <div className="notes-list-skeleton__cell" />
           <div className="notes-list-skeleton__cell" />
           <div className="notes-list-skeleton__cell" />
+          <div className="notes-list-skeleton__cell" />
         </div>
       ))}
     </div>

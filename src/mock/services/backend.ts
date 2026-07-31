@@ -3,6 +3,8 @@ import type { IsoDateTime } from '@/domain/datetime'
 import { parseIsoDateTime } from '@/domain/datetime'
 import type { NoteId } from '@/domain/ids'
 import type {
+  BulkAssignReviewerResponseDto,
+  BulkRegenerateResponseDto,
   CreateVersionSuccessResponseDto,
   NoteDetailDto,
   NotesListResponseDto,
@@ -15,6 +17,11 @@ import { FailureController } from '@/mock/failure'
 import { LatencyController } from '@/mock/latency'
 import { createMulberry32 } from '@/mock/prng'
 import { DEFAULT_SEED_CONFIG, seedMockDatabase, type SeedResult } from '@/mock/seed/seed'
+import {
+  bulkAssignReviewer,
+  type BulkAssignReviewerInput,
+} from '@/mock/services/bulk-assign-reviewer'
+import { type BulkRegenerateInput, bulkRegenerateNotes } from '@/mock/services/bulk-regenerate'
 import { createNoteVersion, type CreateVersionInput } from '@/mock/services/create-version'
 import { getNoteDetailFromDatabase } from '@/mock/services/note-detail'
 import {
@@ -221,6 +228,43 @@ export class MockBackendService {
         noteId: input.noteId,
         baseVersionId: input.baseVersionId,
         content: input.content,
+        clientMutationId: input.clientMutationId,
+        occurredAt: input.occurredAt,
+      })
+      return result.ok ? result.response : result.error
+    } catch (error) {
+      return toMockError(error)
+    }
+  }
+
+  async bulkAssignReviewer(
+    input: BulkAssignReviewerInput & { readonly signal?: AbortSignal },
+  ): Promise<BulkAssignReviewerResponseDto | MockApiError> {
+    try {
+      await this.latency.wait({ signal: input.signal })
+      this.failures.maybeInject('notes.bulkAssign')
+      const result = bulkAssignReviewer(this.database, {
+        actor: input.actor,
+        noteIds: input.noteIds,
+        reviewerId: input.reviewerId,
+        clientMutationId: input.clientMutationId,
+        occurredAt: input.occurredAt,
+      })
+      return result.ok ? result.response : result.error
+    } catch (error) {
+      return toMockError(error)
+    }
+  }
+
+  async bulkRegenerate(
+    input: BulkRegenerateInput & { readonly signal?: AbortSignal },
+  ): Promise<BulkRegenerateResponseDto | MockApiError> {
+    try {
+      await this.latency.wait({ signal: input.signal })
+      this.failures.maybeInject('notes.bulkRegenerate')
+      const result = bulkRegenerateNotes(this.database, {
+        actor: input.actor,
+        noteIds: input.noteIds,
         clientMutationId: input.clientMutationId,
         occurredAt: input.occurredAt,
       })

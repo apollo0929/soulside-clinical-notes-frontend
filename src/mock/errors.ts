@@ -14,6 +14,7 @@ export const MOCK_ERROR_CODES = [
   'IDEMPOTENCY_KEY_REUSED',
   'VERSION_GRAPH_INVALID',
   'STATUS_NOT_EDITABLE',
+  'STATUS_NOT_ASSIGNABLE',
 ] as const
 
 export type MockErrorCode = (typeof MOCK_ERROR_CODES)[number]
