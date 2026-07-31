@@ -1,11 +1,17 @@
 import './NoteDetailPage.css'
 
-import { useEffect, useMemo, useReducer } from 'react'
+import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
-import { type NoteId, parseNoteId, type VersionId } from '@/domain/ids'
+import { type NoteId, parseNoteId, parseUserId, type VersionId } from '@/domain/ids'
 import type { NoteVersionRef } from '@/domain/models/note-version'
 import type { ReviewEvent } from '@/domain/models/review-event'
+import {
+  evaluateEditorAccess,
+  resolveClinicianOwnerId,
+  SoapEditor,
+  useSoapEditor,
+} from '@/features/note-detail/editor'
 import {
   buildLifecycleActionDescriptors,
   getUiOccurredAt,
@@ -28,6 +34,7 @@ import {
   versionComparisonReducer,
 } from '@/features/note-detail/version-comparison-reducer'
 import { VersionHistory } from '@/features/note-detail/VersionHistory'
+import { getActorIdentity } from '@/services/api/actor-provider'
 import { isApiClientError, isNetworkApiError } from '@/services/api/api-errors'
 
 function tryParseNoteId(raw: string | undefined): NoteId | null {
@@ -57,6 +64,7 @@ export function NoteDetailPage() {
   const location = useLocation()
   const noteId = tryParseNoteId(params.noteId)
   const backHref = resolveNotesBackHref(location.state)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
 
   const detailQuery = useNoteDetail(noteId)
   const [comparison, dispatchComparison] = useReducer(
@@ -124,9 +132,41 @@ export function NoteDetailPage() {
     if (!aggregate) {
       return null
     }
-    const oldest = [...aggregate.versions].sort((a, b) => a.revisionNumber - b.revisionNumber)[0]
-    return oldest?.authorId ?? aggregate.currentVersion.authorId
+    return resolveClinicianOwnerId(aggregate.versions, aggregate.currentVersion.authorId)
   }, [aggregate])
+
+  const actorIdentity = getActorIdentity()
+  const actor = useMemo(
+    () => ({
+      userId: parseUserId(actorIdentity.userId),
+      role: actorIdentity.role,
+    }),
+    [actorIdentity.userId, actorIdentity.role],
+  )
+
+  const editorAccess = useMemo(() => {
+    if (!aggregate || !clinicianId) {
+      return {
+        editable: false as const,
+        reasonCode: 'RESOURCE_CONTEXT_REQUIRED',
+        reason: 'Note context is required before editing.',
+      }
+    }
+    return evaluateEditorAccess({
+      actor,
+      noteId: aggregate.note.id,
+      status: aggregate.note.status,
+      clinicianId,
+      assignedReviewerId: aggregate.note.assignedReviewerId,
+    })
+  }, [aggregate, actor, clinicianId])
+
+  const soapEditor = useSoapEditor({
+    noteId,
+    currentVersionId: aggregate?.currentVersion.id ?? null,
+    currentContent: aggregate?.currentVersion.content ?? null,
+    enabled: editorAccess.editable && noteId !== null && Boolean(aggregate),
+  })
 
   const actionDescriptors = useMemo(() => {
     if (!aggregate || !clinicianId) {
@@ -217,7 +257,7 @@ export function NoteDetailPage() {
     )
   }
 
-  const showDiff = canCompareVersions(comparison) && compareEnabled
+  const showDiff = canCompareVersions(comparison) && compareEnabled && !soapEditor.isEditing
   const baseContent =
     comparison.baseVersionId === currentVersionId
       ? aggregate.currentVersion.content
@@ -236,13 +276,59 @@ export function NoteDetailPage() {
     ((baseNeedsFetch && baseVersionQuery.isError) ||
       (compareNeedsFetch && compareVersionQuery.isError))
 
+  const accessReasonId = 'soap-edit-access-reason'
+
   return (
     <main className="note-detail-page" aria-labelledby="note-detail-heading">
       <NoteHeader aggregate={aggregate} backHref={backHref} />
 
       <div className="note-detail-page__layout">
         <div className="note-detail-page__main">
-          {showDiff ? (
+          <div className="note-detail-page__soap-controls">
+            {editorAccess.editable ? (
+              soapEditor.isEditing ? null : (
+                <button
+                  ref={editButtonRef}
+                  type="button"
+                  className="note-detail-page__edit-note"
+                  onClick={() => {
+                    soapEditor.beginEdit()
+                  }}
+                >
+                  Edit note
+                </button>
+              )
+            ) : (
+              <p id={accessReasonId} className="note-detail-page__edit-reason" role="status">
+                Editing unavailable: {editorAccess.reason}
+              </p>
+            )}
+          </div>
+
+          {soapEditor.isEditing && soapEditor.state ? (
+            <SoapEditor
+              state={soapEditor.state}
+              saveLabel={soapEditor.saveLabel}
+              baseRevision={
+                sortedVersions.find((version) => version.id === soapEditor.state!.baseVersionId)
+                  ?.revisionNumber ?? aggregate.currentVersion.revisionNumber
+              }
+              newerVersionWarning={soapEditor.newerVersionWarning}
+              editButtonRef={editButtonRef}
+              onUpdateSection={(section, value) => {
+                soapEditor.dispatch({ type: 'UPDATE_SECTION', section, value })
+              }}
+              onResetSection={(section) => {
+                soapEditor.dispatch({ type: 'RESET_SECTION', section })
+              }}
+              onDiscardAndExit={() => {
+                soapEditor.discardAndExit()
+              }}
+              onCancelClean={() => {
+                soapEditor.exitEdit()
+              }}
+            />
+          ) : showDiff ? (
             <div className="note-detail-page__diff">
               {diffLoading ? (
                 <p role="status" aria-live="polite">
@@ -272,7 +358,9 @@ export function NoteDetailPage() {
             <SoapSectionsReadOnly content={aggregate.currentVersion.content} />
           )}
 
-          {!showDiff && comparison.baseVersionId === comparison.compareVersionId ? (
+          {!soapEditor.isEditing &&
+          !showDiff &&
+          comparison.baseVersionId === comparison.compareVersionId ? (
             <p role="status">Select two different versions to compare changes.</p>
           ) : null}
 
@@ -292,12 +380,23 @@ export function NoteDetailPage() {
             compareVersionId={comparison.compareVersionId}
             compareDisabled={!compareEnabled}
             onSelectBase={(versionId) => {
+              if (soapEditor.isEditing) {
+                return
+              }
               dispatchComparison({ type: 'SET_BASE', versionId })
             }}
             onSelectCompare={(versionId) => {
+              if (soapEditor.isEditing) {
+                return
+              }
               dispatchComparison({ type: 'SET_COMPARE', versionId })
             }}
           />
+          {soapEditor.isEditing ? (
+            <p className="note-detail-page__editor-base-hint" role="status">
+              Editor uses the current version only. Historical versions stay read-only.
+            </p>
+          ) : null}
         </aside>
       </div>
 

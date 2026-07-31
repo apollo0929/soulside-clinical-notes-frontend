@@ -3,7 +3,7 @@ import type { NoteId, VersionId } from '@/domain/ids'
 import type { NoteDetailAggregate } from '@/domain/models/note-detail-aggregate'
 import type { NoteVersion, NoteVersionRef } from '@/domain/models/note-version'
 import type { ReviewEvent } from '@/domain/models/review-event'
-import type { SoapContent } from '@/domain/models/soap'
+import type { SoapContent, SoapSectionKey } from '@/domain/models/soap'
 import type { NoteLifecycleAction } from '@/domain/note-lifecycle'
 import type { WordDiffSegment } from '@/shared/diff'
 
@@ -41,8 +41,6 @@ export type VersionComparisonAction =
   | { readonly type: 'CLEAR' }
   | { readonly type: 'SET_BASE'; readonly versionId: VersionId }
   | { readonly type: 'SET_COMPARE'; readonly versionId: VersionId }
-
-export type SoapSectionKey = 'subjective' | 'objective' | 'assessment' | 'plan'
 
 export type SoapSectionDiff = {
   readonly key: SoapSectionKey

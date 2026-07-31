@@ -56,13 +56,18 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
 - Focused unit tests: `pnpm test -- src/features/notes-list src/services/api src/mock/services/bulk-actions.test.ts`
 - Playwright: `pnpm test:e2e -- e2e/notes-list.spec.ts e2e/notes-bulk.spec.ts`
 
-### Note detail (Step 7A — read-only)
+### Note detail (Steps 7A–7B)
 
 - Route: `/notes/:noteId` (patient name links from the list preserve list URL filters via navigation state).
 - Shows SOAP content, version history, word-level SOAP diff for any two selected versions, and review timeline.
-- Lifecycle actions are presented as a read-only availability summary (no mutations, no editor, no autosave).
+- Lifecycle actions are presented as a read-only availability summary (no transition mutations yet).
 - Version bodies are fetched on demand for selected historical versions only.
-- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts`
+- **SOAP editor (7B):** read-only by default. When access allows, **Edit note** opens a local draft editor.
+  - Editable when `NOTE_EDIT` + version-save policy allow: `IN_REVIEW` (assigned reviewer/ADMIN), `REJECTED`/`AMENDED` (owning clinician/ADMIN).
+  - Dirty tracking is per SOAP section with exact string equality (whitespace matters).
+  - Discard restores the initial version content and exits edit mode after confirmation.
+  - Dirty editors block in-app navigation and register `beforeunload`; no server save yet.
+- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts`
 
 ## Scripts
 

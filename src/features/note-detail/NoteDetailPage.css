@@ -247,6 +247,151 @@
   margin-bottom: 1rem;
 }
 
+.note-detail-page__soap-controls {
+  margin: 0 0 1rem;
+}
+
+.note-detail-page__edit-note,
+.soap-editor__toolbar button,
+.soap-editor__reset-section,
+.unsaved-changes-dialog__actions button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--note-detail-ink);
+  border-radius: 0.25rem;
+  background: #fff;
+  color: var(--note-detail-ink);
+}
+
+.note-detail-page__edit-note:focus-visible,
+.soap-editor__toolbar button:focus-visible,
+.soap-editor__reset-section:focus-visible,
+.soap-editor__textarea:focus-visible,
+.unsaved-changes-dialog__actions button:focus-visible {
+  outline: 2px solid #0b5fff;
+  outline-offset: 2px;
+}
+
+.note-detail-page__edit-reason,
+.note-detail-page__editor-base-hint {
+  margin: 0;
+  color: var(--note-detail-muted);
+  font-size: 0.95rem;
+}
+
+.soap-editor {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--note-detail-line);
+  background: var(--note-detail-panel);
+}
+
+.soap-editor h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+.soap-editor__status {
+  margin-bottom: 1rem;
+}
+
+.soap-editor__save-label {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.soap-editor__base-version,
+.soap-editor__newer-warning {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: var(--note-detail-muted);
+}
+
+.soap-editor__newer-warning {
+  color: var(--note-detail-ink);
+  font-weight: 600;
+}
+
+.soap-editor__section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--note-detail-line);
+}
+
+.soap-editor__section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.soap-editor__label {
+  font-weight: 700;
+}
+
+.soap-editor__section-status {
+  font-size: 0.85rem;
+  color: var(--note-detail-muted);
+}
+
+.soap-editor__reset-section:disabled,
+.soap-editor__toolbar button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.soap-editor__textarea {
+  display: block;
+  width: 100%;
+  min-height: 8rem;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+  border: 1px solid var(--note-detail-line);
+  border-radius: 0.25rem;
+  background: #fff;
+  white-space: pre-wrap;
+}
+
+.soap-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.unsaved-changes-dialog {
+  border: 1px solid var(--note-detail-ink);
+  border-radius: 0.35rem;
+  padding: 1.25rem;
+  max-width: 28rem;
+}
+
+.unsaved-changes-dialog::backdrop {
+  background: rgb(28 36 33 / 45%);
+}
+
+.unsaved-changes-dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+.unsaved-changes-dialog p {
+  margin: 0 0 1rem;
+}
+
+.unsaved-changes-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

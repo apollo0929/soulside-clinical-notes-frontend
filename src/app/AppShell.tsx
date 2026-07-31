@@ -1,10 +1,11 @@
-import { AppRoutes } from '@/app/routes'
+import { Outlet } from 'react-router-dom'
+
 import { AppLayout } from '@/shared/components/AppLayout'
 
 export function AppShell() {
   return (
     <AppLayout>
-      <AppRoutes />
+      <Outlet />
     </AppLayout>
   )
 }

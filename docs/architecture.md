@@ -277,7 +277,8 @@ sequenceDiagram
 
 ## Note Detail Read Path
 
-The `/notes/:noteId` route is a **read-only** detail surface for Step 7A.
+The `/notes/:noteId` route is a detail surface. Step 7A delivered the read path;
+Step 7B adds an optional local SOAP editor draft (no server save yet).
 
 **Detail query ownership:** TanStack Query owns `notesKeys.detail(noteId)` with
 `staleTime` 30s. The query is disabled for invalid route IDs. AbortSignal is forwarded.
@@ -308,8 +309,9 @@ shown as a read-only availability summary — no clickable mutation controls in 
 and generic/network (with Retry). Diff fetch failures keep the current note view and show a
 local alert.
 
-**Deferred:** presence/SSE, editing, dirty tracking, autosave, transition/save mutations,
-conflict UI, offline/IndexedDB, telemetry, and authentication UI.
+**Deferred from 7A:** presence/SSE, autosave, transition/save mutations,
+conflict UI, offline/IndexedDB, telemetry, and authentication UI. SOAP editing
+draft state is Step 7B (below).
 
 ```mermaid
 flowchart LR
@@ -323,6 +325,56 @@ flowchart LR
   Diff --> UI[Accessible ins/del rendering]
   DetailQuery --> Machine[Lifecycle evaluator]
   Machine --> Actions[Action availability summary]
+```
+
+## SOAP Editor State
+
+Step 7B adds a **client-only** SOAP editor on Note Detail. TanStack Query still owns the
+server `currentVersion`. The editor reducer owns an immutable local draft. The editor never
+mutates the query cache, `NoteVersion` domain objects, API DTOs, or the mock database.
+
+**Immutable reducer:** `INITIALIZE`, `UPDATE_SECTION`, `RESET_SECTION`, `RESET_ALL`, and
+`ACCEPT_SAVED_VERSION` (reserved for Step 8 after a successful save). Nested SOAP objects are
+cloned and frozen so callers cannot mutate editor state by reference.
+
+**Section-level dirty tracking:** Each of `subjective` / `objective` / `assessment` / `plan`
+is tracked independently in a `ReadonlySet`. Dirty comparison uses **exact string equality**
+(no trim) because whitespace may be clinically meaningful.
+
+**baseVersionId:** The editor records the server version id it was initialized from. Only the
+current head initializes the editor; historical version bodies never do.
+
+**Access-policy composition:** `authorize(NOTE_EDIT)` then `evaluateVersionSavePolicy`.
+Editable statuses remain `IN_REVIEW` (assigned reviewer or ADMIN), `REJECTED` / `AMENDED`
+(owning clinician or ADMIN). Other statuses stay read-only.
+
+**Explicit edit mode:** Detail opens read-only. When access allows, **Edit note** initializes
+a clean draft from the current version. Cancel on a clean editor exits immediately; discard
+on a dirty editor confirms, restores initial content, and exits edit mode. Version comparison
+remains separate and is hidden while editing.
+
+**Unsaved navigation protection:** React Router `useBlocker` (data router) blocks in-app
+navigation while dirty; `beforeunload` is registered only while dirty. Confirmations never
+include clinical text.
+
+**Incoming server version:** Pure `evaluateEditorReinitialization` decides
+`NO_CHANGE` / `REINITIALIZE` / `PRESERVE_DIRTY_AND_WARN`. Dirty drafts are never overwritten;
+a non-destructive newer-version warning is shown instead. Conflict merge and save are Step 8+.
+
+**Why save/autosave is deferred:** Step 7B proves local draft correctness, dirty tracking,
+access gating, and navigation safety without create-version mutations, debounce-to-server,
+`clientMutationId`, or optimistic cache writes.
+
+```mermaid
+flowchart LR
+  DetailQuery[Current server version] --> Init[Initialize editor]
+  Init --> Draft[Local SOAP draft]
+  Draft --> Dirty[Section dirty selectors]
+  Dirty --> UI[Editor status]
+  Draft --> Guard[Unsaved navigation guard]
+  DetailQuery --> Sync[Reinitialization policy]
+  Sync -->|clean + new version| Init
+  Sync -->|dirty + new version| Preserve[Preserve draft + warning]
 ```
 
 ## Version Creation and Concurrency

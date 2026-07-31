@@ -1,7 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ReactNode } from 'react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { NoteDetailPage } from '@/features/note-detail/NoteDetailPage'
@@ -33,17 +32,30 @@ describe('NoteDetailPage', () => {
 
   function renderDetail(noteId: string, fromList = '/notes?status=FAILED') {
     const client = createTestQueryClient()
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[{ pathname: `/notes/${noteId}`, state: { fromList } }]}>
-          <Routes>
-            <Route path="/notes/:noteId" element={children} />
-            <Route path="/notes" element={<p>List restored</p>} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/notes/:noteId',
+          element: (
+            <QueryClientProvider client={client}>
+              <NoteDetailPage />
+            </QueryClientProvider>
+          ),
+        },
+        {
+          path: '/notes',
+          element: (
+            <QueryClientProvider client={client}>
+              <p>List restored</p>
+            </QueryClientProvider>
+          ),
+        },
+      ],
+      {
+        initialEntries: [{ pathname: `/notes/${noteId}`, state: { fromList } }],
+      },
     )
-    return render(<NoteDetailPage />, { wrapper })
+    return render(<RouterProvider router={router} />)
   }
 
   it('38–43: loading then header, SOAP, and version history', async () => {
@@ -73,15 +85,20 @@ describe('NoteDetailPage', () => {
     expect(back).toHaveAttribute('href', '/notes?status=APPROVED')
 
     const client = createTestQueryClient()
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/notes/%20']}>
-          <Routes>
-            <Route path="/notes/:noteId" element={<NoteDetailPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+    const invalidRouter = createMemoryRouter(
+      [
+        {
+          path: '/notes/:noteId',
+          element: (
+            <QueryClientProvider client={client}>
+              <NoteDetailPage />
+            </QueryClientProvider>
+          ),
+        },
+      ],
+      { initialEntries: ['/notes/%20'] },
     )
+    render(<RouterProvider router={invalidRouter} />)
     expect(screen.getByRole('heading', { name: 'Invalid note link' })).toBeInTheDocument()
   })
 
@@ -123,15 +140,23 @@ describe('NoteDetailPage', () => {
 
     const { createMemoryRouter, RouterProvider } = await import('react-router-dom')
     const client = createTestQueryClient()
-    const router = createMemoryRouter([{ path: '/notes/:noteId', element: <NoteDetailPage /> }], {
-      initialEntries: [`/notes/${first.id}`],
-    })
-
-    render(
-      <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/notes/:noteId',
+          element: (
+            <QueryClientProvider client={client}>
+              <NoteDetailPage />
+            </QueryClientProvider>
+          ),
+        },
+      ],
+      {
+        initialEntries: [`/notes/${first.id}`],
+      },
     )
+
+    render(<RouterProvider router={router} />)
 
     await waitFor(() => {
       expect(screen.getByRole('navigation', { name: 'Version history' })).toBeInTheDocument()

@@ -1,28 +1,18 @@
-import { lazy, Suspense } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { type ReactNode, Suspense } from 'react'
+import { type RouteObject } from 'react-router-dom'
 
+import { LazyNoteDetailPage, LazyNotesListPage } from '@/app/lazy-pages'
 import { HomePage } from '@/app/pages/HomePage'
 import { NotFoundPage } from '@/app/pages/NotFoundPage'
 
-const NotesListPage = lazy(async () => {
-  const module = await import('@/features/notes-list')
-  return { default: module.NotesListPage }
-})
-
-const NoteDetailPage = lazy(async () => {
-  const module = await import('@/features/note-detail')
-  return { default: module.NoteDetailPage }
-})
-
-export function AppRoutes() {
-  return (
-    <Suspense fallback={<p role="status">Loading page…</p>}>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/notes" element={<NotesListPage />} />
-        <Route path="/notes/:noteId" element={<NoteDetailPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </Suspense>
-  )
+function withSuspense(element: ReactNode) {
+  return <Suspense fallback={<p role="status">Loading page…</p>}>{element}</Suspense>
 }
+
+/** Child routes under the app shell layout (data router). */
+export const appChildRoutes: RouteObject[] = [
+  { index: true, element: <HomePage /> },
+  { path: 'notes', element: withSuspense(<LazyNotesListPage />) },
+  { path: 'notes/:noteId', element: withSuspense(<LazyNoteDetailPage />) },
+  { path: '*', element: <NotFoundPage /> },
+]
