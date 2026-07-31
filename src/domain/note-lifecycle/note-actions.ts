@@ -1,0 +1,14 @@
+export const NOTE_LIFECYCLE_ACTIONS = [
+  'GENERATION_COMPLETED',
+  'GENERATION_FAILED',
+  'REGENERATE',
+  'START_REVIEW',
+  'RETURN_TO_QUEUE',
+  'APPROVE',
+  'REJECT',
+  'RESUBMIT',
+  'AMEND',
+  'GRACE_EXPIRED',
+] as const
+
+export type NoteLifecycleAction = (typeof NOTE_LIFECYCLE_ACTIONS)[number]

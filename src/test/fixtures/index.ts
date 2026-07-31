@@ -17,3 +17,4 @@ export {
   buildVersionAddedRealtimeEventDto,
   buildVersionConflictResponseDto,
 } from '@/test/fixtures/dto'
+export { buildNoteTransitionContext } from '@/test/fixtures/transition-context'

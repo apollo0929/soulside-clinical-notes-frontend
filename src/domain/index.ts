@@ -44,6 +44,29 @@ export type { Patient } from '@/domain/models/patient'
 export type { ReviewEvent } from '@/domain/models/review-event'
 export type { SoapContent } from '@/domain/models/soap'
 export type { User } from '@/domain/models/user'
+export {
+  type AllowedTransitionDecision,
+  AMENDMENT_GRACE_PERIOD_MS,
+  canTransition,
+  type DeniedTransitionDecision,
+  evaluateNoteTransition,
+  getAllowedAvailableActions,
+  getAvailableActions,
+  type GetAvailableActionsInput,
+  getTransitionDecision,
+  isTransitionAllowed,
+  NOTE_LIFECYCLE_ACTIONS,
+  NOTE_TRANSITION_SPECIFICATIONS,
+  type NoteLifecycleAction,
+  type NoteTransitionContext,
+  type NoteTransitionInput,
+  TRANSITION_DENIAL_REASON_CODES,
+  TRANSITION_SOURCES,
+  type TransitionDecision,
+  type TransitionDenialReasonCode,
+  type TransitionEffect,
+  type TransitionSource,
+} from '@/domain/note-lifecycle'
 export { USER_ROLES, type UserRole } from '@/domain/roles'
 export {
   type CreateVersionRequestDto,
