@@ -56,7 +56,7 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
 - Focused unit tests: `pnpm test -- src/features/notes-list src/services/api src/mock/services/bulk-actions.test.ts`
 - Playwright: `pnpm test:e2e -- e2e/notes-list.spec.ts e2e/notes-bulk.spec.ts`
 
-### Note detail (Steps 7A–8)
+### Note detail (Steps 7A–9)
 
 - Route: `/notes/:noteId` (patient name links from the list preserve list URL filters via navigation state).
 - Shows SOAP content, version history, word-level SOAP diff for any two selected versions, and review timeline.
@@ -69,9 +69,14 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
 - **Autosave (8):** 700ms debounce; note-scoped serialized saves (one in-flight, one coalesced follow-up).
   - Status: No local changes → Waiting to save… → Saving… / queued follow-up → Saved (or retryable/non-retryable error / conflict).
   - Retries reuse the same `clientMutationId`; follow-ups get a new id and advanced `baseVersionId`.
-  - Version conflicts preserve the local draft and stop autosave (no merge UI / offline replay yet).
+  - Version conflicts preserve the local draft and stop autosave.
   - Navigation stays guarded while dirty or while a save is unacked.
-- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts`
+- **Three-way conflict resolution (9):** hydrate server head + common ancestor; classify each SOAP section;
+  auto-merge non-conflicts; explicit Keep mine / Use server / Manual merge for true conflicts (no clinical concatenation).
+  - Resolve and save uses the **server head** as `baseVersionId` and a **new** `clientMutationId`.
+  - A resolve that itself 409s opens a new session with the just-resolved content as the local side (no auto-retry).
+  - Ordinary editor stays frozen while resolving; offline replay is not implemented yet.
+- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts`
 
 ## Scripts
 

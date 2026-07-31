@@ -193,6 +193,38 @@ export class AutosaveCoordinator {
     this.#setStatus({ kind: 'CLEAN' })
   }
 
+  /**
+   * Exit CONFLICT after a successful resolved save.
+   * Advances the coordinator base so later autosave continues from the new head.
+   */
+  clearConflictResolved(input: {
+    readonly versionId: VersionId
+    readonly content: SoapContent
+  }): void {
+    if (this.#disposed || this.#status.kind !== 'CONFLICT') {
+      return
+    }
+    this.#queued = null
+    this.#failedIntent = null
+    this.#inFlight = null
+    this.#abortController = null
+    this.#ackedBaseVersionId = input.versionId
+    this.#lastSavedContent = cloneContent(input.content)
+    this.#setStatus({ kind: 'SAVED', versionId: input.versionId })
+  }
+
+  /**
+   * Replace the conflict payload when a resolution save itself conflicts (409).
+   */
+  replaceConflict(conflict: import('@/domain/schemas/conflict').VersionConflictResponseDto): void {
+    if (this.#disposed || this.#status.kind !== 'CONFLICT') {
+      return
+    }
+    this.#queued = null
+    this.#failedIntent = null
+    this.#setStatus({ kind: 'CONFLICT', conflict })
+  }
+
   dispose(options: { readonly abortInFlight?: boolean } = {}): void {
     if (this.#disposed) {
       return

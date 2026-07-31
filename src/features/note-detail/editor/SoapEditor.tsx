@@ -12,7 +12,9 @@ export type SoapEditorProps = {
   readonly baseRevision: number
   readonly newerVersionWarning: boolean
   readonly guardActive?: boolean
+  readonly frozen?: boolean
   readonly autosaveSlot?: ReactNode
+  readonly conflictSlot?: ReactNode
   readonly onUpdateSection: (section: SoapSectionKey, value: string) => void
   readonly onResetSection: (section: SoapSectionKey) => void
   readonly onDiscardAndExit: () => void
@@ -26,7 +28,9 @@ export function SoapEditor({
   baseRevision,
   newerVersionWarning,
   guardActive = false,
+  frozen = false,
   autosaveSlot = null,
+  conflictSlot = null,
   onUpdateSection,
   onResetSection,
   onDiscardAndExit,
@@ -36,11 +40,15 @@ export function SoapEditor({
   const headingId = useId()
   const [discardOpen, setDiscardOpen] = useState(false)
   const dirty = state.dirtySections.size > 0
-  const { blocker, confirmStay, confirmLeave } = useUnsavedNavigationGuard(dirty || guardActive)
+  // Conflict navigation protection takes precedence: freeze also blocks discard dialogs.
+  const { blocker, confirmStay, confirmLeave } = useUnsavedNavigationGuard(
+    dirty || guardActive || frozen,
+  )
   const focusedOnOpen = useRef(false)
   const navBlocked = blocker.state === 'blocked'
   // Single confirmation surface: navigation block supersedes in-editor discard.
-  const showDiscardDialog = discardOpen && !navBlocked
+  // While frozen (conflict), suppress the editor discard dialog entirely.
+  const showDiscardDialog = discardOpen && !navBlocked && !frozen
   const dialogOpen = navBlocked || showDiscardDialog
   const dialogMode = navBlocked ? 'navigate' : 'discard'
 
@@ -95,6 +103,13 @@ export function SoapEditor({
         newerVersionWarning={newerVersionWarning}
       />
       {autosaveSlot}
+      {conflictSlot}
+
+      {frozen ? (
+        <p className="soap-editor__frozen-notice" role="status">
+          Editing is paused while you resolve the version conflict below.
+        </p>
+      ) : null}
 
       <form
         className="soap-editor__form"
@@ -108,17 +123,22 @@ export function SoapEditor({
             section={section}
             value={state.draftContent[section]}
             dirty={state.dirtySections.has(section)}
+            readOnly={frozen}
             onChange={(value) => {
-              onUpdateSection(section, value)
+              if (!frozen) {
+                onUpdateSection(section, value)
+              }
             }}
             onReset={() => {
-              onResetSection(section)
+              if (!frozen) {
+                onResetSection(section)
+              }
             }}
           />
         ))}
 
         <div className="soap-editor__toolbar">
-          <button type="button" onClick={requestExit}>
+          <button type="button" onClick={requestExit} disabled={frozen}>
             {dirty ? 'Discard changes' : 'Cancel'}
           </button>
         </div>
@@ -129,7 +149,9 @@ export function SoapEditor({
         title={dialogMode === 'navigate' ? 'Leave without saving?' : 'Discard unsaved changes?'}
         description={
           dialogMode === 'navigate'
-            ? 'You have unsaved SOAP edits. Leaving this page will discard those changes.'
+            ? frozen
+              ? 'You have an unresolved version conflict with local edits. Leaving this page will discard those changes.'
+              : 'You have unsaved SOAP edits. Leaving this page will discard those changes.'
             : 'Your unsaved SOAP edits will be discarded. This cannot be undone.'
         }
         stayLabel="Stay and continue editing"

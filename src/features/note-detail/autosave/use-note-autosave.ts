@@ -40,6 +40,13 @@ export type UseNoteAutosaveResult = {
   readonly status: AutosaveStatus
   readonly retry: () => void
   readonly guardActive: boolean
+  readonly clearConflictResolved: (input: {
+    readonly versionId: VersionId
+    readonly content: SoapContent
+  }) => void
+  readonly replaceConflict: (
+    conflict: import('@/domain/schemas/conflict').VersionConflictResponseDto,
+  ) => void
 }
 
 const CLEAN_STATUS: AutosaveStatus = { kind: 'CLEAN' }
@@ -273,7 +280,20 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
     sessionStoreRef.current.coordinator?.retry()
   }
 
+  const clearConflictResolved = (input: {
+    readonly versionId: VersionId
+    readonly content: SoapContent
+  }) => {
+    sessionStoreRef.current.coordinator?.clearConflictResolved(input)
+  }
+
+  const replaceConflict = (
+    conflict: import('@/domain/schemas/conflict').VersionConflictResponseDto,
+  ) => {
+    sessionStoreRef.current.coordinator?.replaceConflict(conflict)
+  }
+
   const guardActive = dirty || autosaveNeedsNavigationGuard(status)
 
-  return { status, retry, guardActive }
+  return { status, retry, guardActive, clearConflictResolved, replaceConflict }
 }

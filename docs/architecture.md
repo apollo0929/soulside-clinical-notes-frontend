@@ -419,9 +419,9 @@ does not claim Saved before server acknowledgment.
 base, content). Newer queued drafts follow after a successful retry. 403 / validation are
 non-retryable. Aborts from dispose are not shown as save failures.
 
-**Conflict (Step 8):** HTTP 409 `version_conflict` enters `CONFLICT`, preserves the local
-draft and dirty set, drops queued automatic follow-ups, and stops autosave. No merge UI yet —
-only “Conflict resolution required” plus a preservation message.
+**Conflict (Step 8 entry):** HTTP 409 `version_conflict` enters `CONFLICT`, preserves the local
+draft and dirty set, drops queued automatic follow-ups, and stops autosave. Step 9 opens the
+three-way resolver (below).
 
 **Query-cache reconciliation:** On success, pure helpers update the note-detail cache
 (current version, content from the saved command, revision / parent from the response, actor
@@ -434,8 +434,7 @@ invalidated without wiping visible rows.
 dispose clears the debounce timer, aborts in-flight fetch when appropriate, and drops
 listeners. Intentional discard abort does not surface as a user-facing save error.
 
-**Deferred to Step 9:** three-way conflict resolution UI, merge controls, conflict diff
-rendering, IndexedDB / offline queue / replay, SSE/WebSocket, presence, telemetry.
+**Deferred after Step 9:** IndexedDB / offline queue / replay, SSE/WebSocket, presence, telemetry.
 
 ```mermaid
 sequenceDiagram
@@ -494,8 +493,8 @@ found (single-parent lineages). Cycles / missing parents / cross-note versions a
 ADMIN). `READY_FOR_REVIEW`, `GENERATING`, `FAILED`, `APPROVED`, and `LOCKED` deny saves.
 Authorization still requires `NOTE_EDIT` first.
 
-Client autosave coordination is implemented in Step 8 (above). Three-way merge UI remains
-Step 9.
+Client autosave coordination is implemented in Step 8 (above). Three-way conflict resolution
+is Step 9 (below).
 
 ```mermaid
 sequenceDiagram
@@ -516,10 +515,83 @@ sequenceDiagram
     alt stale base
       D-->>S: current head
       S-->>H: VERSION_CONFLICT
-    else current base
+    else current tip
       S->>D: atomic insert version + update head + record mutation
       D-->>S: committed
       S-->>H: version response
     end
   end
+```
+
+## Three-Way Conflict Resolution
+
+Step 9 resolves `VERSION_CONFLICT` without discarding the clinician’s local draft. Dependency
+direction stays:
+
+`Conflict UI → pure three-way merge model → selected version queries → create-version API → mock backend`
+
+Merge semantics live in pure helpers (`classifySectionConflict`, session builder, resolution
+reducer, selectors). React components do not invent clinical merge rules.
+
+**Inputs:** When autosave receives 409, the coordinator freezes autosave and preserves the
+editor draft. The conflict DTO carries only summaries (server head + common ancestor ids /
+revisions). The UI hydrates **exactly two** historical bodies in parallel via existing
+`notesKeys.version` queries: server head and common ancestor. Both must belong to the same
+note. The local side is a **snapshot taken at conflict time** and is never replaced by a later
+detail refetch.
+
+**Section classification** (exact string equality; whitespace significant; no trim):
+
+1. local === ancestor && server === ancestor → `UNCHANGED`
+2. local !== ancestor && server === ancestor → `LOCAL_ONLY`
+3. local === ancestor && server !== ancestor → `SERVER_ONLY`
+4. local === server && local !== ancestor → `SAME_CHANGE`
+5. otherwise divergent → `CONFLICT`
+
+**Automatic vs explicit:** Non-conflicting sections resolve automatically
+(`UNCHANGED`/`SAME_CHANGE` → shared value; `LOCAL_ONLY` → local; `SERVER_ONLY` → server).
+True `CONFLICT` sections require Keep mine, Use server, or Manual merge (manual initializes
+from local text). Clinical strings are **never** concatenated or semantically merged — the
+product must not invent clinical meaning.
+
+**Editing policy:** While the resolver is open the ordinary SOAP editor is frozen (read-only).
+All resolution edits happen inside the conflict UI so the local snapshot stays coherent and
+autosave cannot resume.
+
+**Resolved save:** `baseVersionId` is always the **current server head** (never the stale
+local base). Each resolve attempt uses a **new** `clientMutationId`. Retry of the exact same
+failed resolve reuses that pending id; changing a section choice after failure clears the
+pending request so the next submit gets a new id. Success closes the resolver, sets
+`initialContent`/`draftContent` to the resolved SOAP, clears dirty sections, returns autosave
+to clean/saved, reconciles detail/history/list caches immutably (no duplicate history on
+idempotent replay), and remains in edit mode.
+
+**Repeated conflict:** If the resolve POST itself 409s, the just-resolved content becomes the
+new local side, a new session hydrates the new head/ancestor, and the next resolve uses another
+new mutation id. There is no automatic retry.
+
+**Navigation:** Conflict keeps the unsaved/guard path active. Conflict copy takes precedence
+over the ordinary discard dialog (only one confirmation surface). Leaving silently is not
+allowed.
+
+**Still deferred (offline replay):** IndexedDB, offline queue, and offline replay remain
+future work — conflict resolution here is online-only.
+
+```mermaid
+sequenceDiagram
+  participant E as Editor
+  participant A as Autosave
+  participant S as Server
+  participant R as Conflict resolver
+
+  E->>A: Save from base v5
+  A->>S: POST base v5
+  S-->>A: 409 head v7, ancestor v4
+  A->>R: Preserve local + open conflict
+  R->>S: Fetch v7 and v4
+  S-->>R: Server head + ancestor content
+  R->>R: Resolve sections
+  R->>S: POST resolved content, base v7, new mutation ID
+  S-->>R: Version v8
+  R->>E: Set clean resolved draft, base v8
 ```

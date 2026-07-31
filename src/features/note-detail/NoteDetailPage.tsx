@@ -1,16 +1,23 @@
 import './NoteDetailPage.css'
 
-import { useEffect, useMemo, useReducer, useRef } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
 import { type NoteId, parseNoteId, parseUserId, type VersionId } from '@/domain/ids'
 import type { NoteVersionRef } from '@/domain/models/note-version'
 import type { ReviewEvent } from '@/domain/models/review-event'
+import { cloneSoapContent } from '@/domain/models/soap'
+import type { VersionConflictResponseDto } from '@/domain/schemas/conflict'
 import {
   AutosaveStatusBanner,
   autosaveStatusLabel,
   useNoteAutosave,
 } from '@/features/note-detail/autosave'
+import {
+  type ConflictLocalSnapshot,
+  ConflictResolver,
+  useConflictResolution,
+} from '@/features/note-detail/conflict'
 import {
   evaluateEditorAccess,
   resolveClinicianOwnerId,
@@ -180,6 +187,64 @@ export function NoteDetailPage() {
     dispatch: soapEditor.dispatch,
   })
 
+  type ConflictHold = {
+    readonly dto: VersionConflictResponseDto
+    readonly snapshot: ConflictLocalSnapshot
+  }
+  const [conflictHold, setConflictHold] = useState<ConflictHold | null>(null)
+  const inConflict = autosave.status.kind === 'CONFLICT'
+
+  // Capture local draft once when CONFLICT begins; clear when autosave leaves CONFLICT.
+  if (inConflict && soapEditor.state && conflictHold === null) {
+    setConflictHold({
+      dto: autosave.status.conflict,
+      snapshot: {
+        noteId: soapEditor.state.noteId,
+        localBaseVersionId: soapEditor.state.baseVersionId,
+        localContent: cloneSoapContent(soapEditor.state.draftContent),
+      },
+    })
+  } else if (!inConflict && conflictHold !== null) {
+    setConflictHold(null)
+  }
+
+  const conflictResolution = useConflictResolution({
+    active: inConflict && conflictHold !== null,
+    snapshot: conflictHold?.snapshot ?? null,
+    conflict: conflictHold?.dto ?? null,
+    onResolved: (result) => {
+      soapEditor.dispatch({
+        type: 'ACCEPT_SAVED_VERSION',
+        baseVersionId: result.versionId,
+        content: result.content,
+      })
+      autosave.clearConflictResolved({
+        versionId: result.versionId,
+        content: result.content,
+      })
+      setConflictHold(null)
+      queueMicrotask(() => {
+        const heading = document.querySelector('.soap-editor h2')
+        if (heading instanceof HTMLElement) {
+          heading.focus()
+          return
+        }
+        document.getElementById('soap-editor-save-label')?.focus?.()
+      })
+    },
+    onRepeatedConflict: (nextConflict, localContent, attemptedBaseVersionId) => {
+      autosave.replaceConflict(nextConflict)
+      setConflictHold({
+        dto: nextConflict,
+        snapshot: {
+          noteId: noteId!,
+          localBaseVersionId: attemptedBaseVersionId,
+          localContent,
+        },
+      })
+    },
+  })
+
   const actionDescriptors = useMemo(() => {
     if (!aggregate || !clinicianId) {
       return []
@@ -327,8 +392,21 @@ export function NoteDetailPage() {
               }
               newerVersionWarning={soapEditor.newerVersionWarning}
               guardActive={autosave.guardActive}
+              frozen={inConflict}
               autosaveSlot={
                 <AutosaveStatusBanner status={autosave.status} onRetry={autosave.retry} />
+              }
+              conflictSlot={
+                inConflict ? (
+                  <ConflictResolver
+                    conflictResolution={conflictResolution}
+                    onContinueReviewing={() => {
+                      document
+                        .querySelector('.conflict-resolver__heading')
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }}
+                  />
+                ) : null
               }
               editButtonRef={editButtonRef}
               onUpdateSection={(section, value) => {

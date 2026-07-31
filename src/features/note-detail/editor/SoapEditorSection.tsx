@@ -5,6 +5,7 @@ export type SoapEditorSectionProps = {
   readonly section: SoapSectionKey
   readonly value: string
   readonly dirty: boolean
+  readonly readOnly?: boolean
   readonly onChange: (value: string) => void
   readonly onReset: () => void
   readonly autoFocus?: boolean
@@ -14,6 +15,7 @@ export function SoapEditorSection({
   section,
   value,
   dirty,
+  readOnly = false,
   onChange,
   onReset,
   autoFocus = false,
@@ -35,7 +37,7 @@ export function SoapEditorSection({
         <button
           type="button"
           className="soap-editor__reset-section"
-          disabled={!dirty}
+          disabled={!dirty || readOnly}
           onClick={onReset}
           aria-label={`Reset ${label} to saved content`}
         >
@@ -43,13 +45,16 @@ export function SoapEditorSection({
         </button>
       </div>
       <p id={hintId} className="visually-hidden">
-        Edit the {label} section. Whitespace is significant for unsaved-change tracking.
+        {readOnly
+          ? `${label} is read-only while conflict resolution is open.`
+          : `Edit the ${label} section. Whitespace is significant for unsaved-change tracking.`}
       </p>
       <textarea
         id={fieldId}
         name={section}
         className="soap-editor__textarea"
         value={value}
+        readOnly={readOnly}
         onChange={(event) => {
           onChange(event.target.value)
         }}
