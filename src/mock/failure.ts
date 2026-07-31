@@ -4,6 +4,7 @@ import type { DeterministicRandom } from '@/mock/prng'
 export type FailureEndpoint =
   | 'notes.list'
   | 'notes.detail'
+  | 'notes.versionDetail'
   | 'notes.transition'
   | 'notes.createVersion'
   | 'notes.bulkAssign'

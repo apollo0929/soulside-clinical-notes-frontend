@@ -1,11 +1,12 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 
 import type { NoteId } from '@/domain/ids'
 import type { NoteSummary } from '@/domain/models/note-summary'
+import { NOTES_VIRTUAL_ROW_HEIGHT } from '@/features/notes-list/notes-virtual-row'
 import type { NotesListSortField } from '@/services/api/notes-api'
 
-const ROW_HEIGHT = 44
 const OVERSCAN = 8
 
 export type NotesVirtualListProps = {
@@ -22,6 +23,8 @@ export type NotesVirtualListProps = {
   readonly onToggleSelectAll: () => void
   readonly pendingIds: ReadonlySet<NoteId>
   readonly selectionDisabled: boolean
+  /** Path + search for returning from note detail without open redirects. */
+  readonly listReturnTo: string
 }
 
 function formatTimestamp(value: string): string {
@@ -53,6 +56,7 @@ export function NotesVirtualList({
   onToggleSelectAll,
   pendingIds,
   selectionDisabled,
+  listReturnTo,
 }: NotesVirtualListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const onLoadMoreRef = useRef(onLoadMore)
@@ -73,7 +77,7 @@ export function NotesVirtualList({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => NOTES_VIRTUAL_ROW_HEIGHT,
     overscan: OVERSCAN,
   })
 
@@ -90,7 +94,10 @@ export function NotesVirtualList({
   }, [lastVirtualIndex, rows.length, hasNextPage, isFetchingNextPage])
 
   return (
-    <div className="notes-virtual">
+    <div
+      className="notes-virtual"
+      style={{ ['--notes-row-height' as string]: `${NOTES_VIRTUAL_ROW_HEIGHT}px` }}
+    >
       <div
         ref={parentRef}
         className="notes-virtual__scroller"
@@ -202,9 +209,15 @@ export function NotesVirtualList({
                       />
                     </label>
                   </div>
-                  <div role="cell" className="notes-virtual__cell">
-                    <span className="notes-virtual__patient">{note.patientDisplayName}</span>
-                    <span className="notes-virtual__note-id">{note.id}</span>
+                  <div role="cell" className="notes-virtual__cell notes-virtual__cell--patient">
+                    <Link
+                      to={`/notes/${note.id}`}
+                      state={{ fromList: listReturnTo }}
+                      className="notes-virtual__patient-link"
+                    >
+                      <span className="notes-virtual__patient">{note.patientDisplayName}</span>
+                      <span className="visually-hidden"> Open note {note.id}</span>
+                    </Link>
                   </div>
                   <div role="cell" className="notes-virtual__cell">
                     <span className={`notes-status notes-status--${note.status.toLowerCase()}`}>

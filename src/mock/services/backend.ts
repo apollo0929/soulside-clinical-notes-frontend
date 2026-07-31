@@ -1,13 +1,14 @@
 import { authorize } from '@/domain/authorization'
 import type { IsoDateTime } from '@/domain/datetime'
 import { parseIsoDateTime } from '@/domain/datetime'
-import type { NoteId } from '@/domain/ids'
+import type { NoteId, VersionId } from '@/domain/ids'
 import type {
   BulkAssignReviewerResponseDto,
   BulkRegenerateResponseDto,
   CreateVersionSuccessResponseDto,
   NoteDetailDto,
   NotesListResponseDto,
+  NoteVersionDetailDto,
 } from '@/domain/schemas'
 import { FixedMockClock, type MockClock } from '@/mock/clock'
 import type { NoteListSortDirection, NoteListSortField } from '@/mock/cursor'
@@ -24,6 +25,7 @@ import {
 import { type BulkRegenerateInput, bulkRegenerateNotes } from '@/mock/services/bulk-regenerate'
 import { createNoteVersion, type CreateVersionInput } from '@/mock/services/create-version'
 import { getNoteDetailFromDatabase } from '@/mock/services/note-detail'
+import { getNoteVersionFromDatabase } from '@/mock/services/note-version-detail'
 import {
   DEFAULT_NOTES_LIST_LIMIT,
   listNotesFromDatabase,
@@ -54,6 +56,13 @@ export type ListNotesServiceInput = {
 export type GetNoteDetailServiceInput = {
   readonly actor: ActorContext
   readonly noteId: NoteId
+  readonly signal?: AbortSignal
+}
+
+export type GetNoteVersionServiceInput = {
+  readonly actor: ActorContext
+  readonly noteId: NoteId
+  readonly versionId: VersionId
   readonly signal?: AbortSignal
 }
 
@@ -187,6 +196,58 @@ export class MockBackendService {
 
       const result = getNoteDetailFromDatabase(this.database, input.noteId)
       return result.ok ? result.detail : result.error
+    } catch (error) {
+      return toMockError(error)
+    }
+  }
+
+  async getNoteVersion(
+    input: GetNoteVersionServiceInput,
+  ): Promise<NoteVersionDetailDto | MockApiError> {
+    try {
+      await this.latency.wait({ signal: input.signal })
+      this.failures.maybeInject('notes.versionDetail')
+
+      const note = this.database.getNote(input.noteId)
+      if (!note) {
+        return createMockApiError({
+          code: 'NOT_FOUND',
+          status: 404,
+          message: `Note ${input.noteId} was not found.`,
+        })
+      }
+
+      const versions = this.database.listVersionsForNote(note.id)
+      const firstVersion = [...versions].sort((a, b) => a.revisionNumber - b.revisionNumber)[0]
+      if (!firstVersion) {
+        return createMockApiError({
+          code: 'NOT_FOUND',
+          status: 404,
+          message: `Versions for note ${input.noteId} were not found.`,
+        })
+      }
+
+      const auth = authorize({
+        permission: 'NOTE_CONTENT_VIEW',
+        actor: { userId: input.actor.userId, role: input.actor.role },
+        resource: {
+          kind: 'NOTE',
+          noteId: note.id,
+          clinicianId: firstVersion.authorId,
+          assignedReviewerId: note.assignedReviewerId,
+        },
+      })
+      if (!auth.allowed) {
+        return createMockApiError({
+          code: 'FORBIDDEN',
+          status: 403,
+          message: auth.reason,
+          details: { reasonCode: auth.reasonCode },
+        })
+      }
+
+      const result = getNoteVersionFromDatabase(this.database, input.noteId, input.versionId)
+      return result.ok ? result.version : result.error
     } catch (error) {
       return toMockError(error)
     }

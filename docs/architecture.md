@@ -275,6 +275,56 @@ sequenceDiagram
   UI-->>U: Announce counts
 ```
 
+## Note Detail Read Path
+
+The `/notes/:noteId` route is a **read-only** detail surface for Step 7A.
+
+**Detail query ownership:** TanStack Query owns `notesKeys.detail(noteId)` with
+`staleTime` 30s. The query is disabled for invalid route IDs. AbortSignal is forwarded.
+`placeholderData` is unset so a previous note cannot flash when the route note changes.
+App QueryClient retries are disabled; the detail hook also refuses retries for 403/404.
+
+**Version content on demand:** History refs arrive with the detail payload (no SOAP bodies).
+Selected historical versions use `notesKeys.version(noteId, versionId)`. The current version
+reuses `detail.currentVersion` without a second fetch. Two historical selections load in
+parallel.
+
+**Local comparison selection:** Base/Compare `VersionId`s live in a page-local reducer (not
+URL). Defaults: Compare = current, Base = parent (or current when root-only). Same-version
+selection is allowed but diff is disabled (read-only content stays visible). History is
+sorted **newest revision first**.
+
+**Pure word-diff adapter:** `diffWords` in `src/shared/diff` is a package-free LCS over
+whitespace-preserving tokens. UI renders `<ins>` / `<del>` with an accessible legend and
+does not use `dangerouslySetInnerHTML`.
+
+**Lifecycle-derived action presentation:** User actions are evaluated via
+`evaluateNoteTransition` + `authorize` + `combineAuthorizationAndLifecycle`. Results are
+shown as a read-only availability summary — no clickable mutation controls in 7A.
+`approvedAt` is derived from the latest ReviewEvent with `toStatus === APPROVED`.
+`occurredAt` is injected through `getUiOccurredAt` (not inside pure evaluation).
+
+**Error-state distinctions:** Invalid route (parser failure), 403 Forbidden, 404 Not found,
+and generic/network (with Retry). Diff fetch failures keep the current note view and show a
+local alert.
+
+**Deferred:** presence/SSE, editing, dirty tracking, autosave, transition/save mutations,
+conflict UI, offline/IndexedDB, telemetry, and authentication UI.
+
+```mermaid
+flowchart LR
+  Route[/notes/:noteId/] --> DetailQuery[Detail query]
+  DetailQuery --> DetailAPI[Typed detail API]
+  DetailAPI --> MSW[Mock REST handlers]
+  DetailQuery --> Current[Current SOAP content]
+  History[Version history] --> Selection[Local version selection]
+  Selection --> VersionQueries[Selected version queries]
+  VersionQueries --> Diff[Pure word diff]
+  Diff --> UI[Accessible ins/del rendering]
+  DetailQuery --> Machine[Lifecycle evaluator]
+  Machine --> Actions[Action availability summary]
+```
+
 ## Version Creation and Concurrency
 
 Content saves create **immutable** `NoteVersion` rows. The mock never mutates an existing

@@ -1,3 +1,4 @@
+import type { NoteId, VersionId } from '@/domain/ids'
 import { NOTE_STATUSES, type NoteStatus } from '@/domain/statuses'
 import type { NotesListFilters } from '@/features/notes-list/notes-list.types'
 
@@ -21,6 +22,7 @@ function orderStatuses(statuses: readonly NoteStatus[]): NoteStatus[] {
 /**
  * Stable query-key factory. Cursor is a pageParam, not part of the base list key.
  * Statuses are copied into a sorted tuple so object identity does not matter.
+ * Detail and version keys nest under `notes` without colliding with list keys.
  */
 export const notesKeys = {
   all: ['notes'] as const,
@@ -39,4 +41,9 @@ export const notesKeys = {
         sortDirection: input.sortDirection,
       },
     ] as const,
+  details: () => [...notesKeys.all, 'detail'] as const,
+  detail: (noteId: NoteId) => [...notesKeys.details(), noteId] as const,
+  versions: () => [...notesKeys.all, 'version'] as const,
+  version: (noteId: NoteId, versionId: VersionId) =>
+    [...notesKeys.versions(), noteId, versionId] as const,
 }

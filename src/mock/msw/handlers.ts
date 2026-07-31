@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { z } from 'zod'
 
 import { parseIsoDateTime } from '@/domain/datetime'
-import { parseNoteId, parsePatientId, parseUserId } from '@/domain/ids'
+import { parseNoteId, parsePatientId, parseUserId, parseVersionId } from '@/domain/ids'
 import { NOTE_LIFECYCLE_ACTIONS } from '@/domain/note-lifecycle'
 import { TRANSITION_SOURCES } from '@/domain/note-lifecycle'
 import {
@@ -11,6 +11,7 @@ import {
   noteDetailDtoSchema,
   notesListResponseDtoSchema,
   noteStatusSchema,
+  noteVersionDetailDtoSchema,
   versionConflictResponseDtoSchema,
 } from '@/domain/schemas'
 import {
@@ -97,6 +98,42 @@ export function createMockBackendHandlers(backend: MockBackendService) {
       const validated = noteDetailDtoSchema.safeParse(result)
       if (!validated.success) {
         return errorResponse(createInternal('Detail response failed contract validation.'))
+      }
+      return HttpResponse.json(validated.data)
+    }),
+
+    http.get('*/api/notes/:noteId/versions/:versionId', async ({ request, params }) => {
+      const actor = parseActorHeaders(request.headers)
+      if (isMockApiError(actor)) {
+        return errorResponse(actor)
+      }
+
+      let noteId
+      let versionId
+      try {
+        noteId = parseNoteId(String(params.noteId))
+      } catch {
+        return errorResponse(createInvalid('Invalid note id.'))
+      }
+      try {
+        versionId = parseVersionId(String(params.versionId))
+      } catch {
+        return errorResponse(createInvalid('Invalid version id.'))
+      }
+
+      const result = await backend.getNoteVersion({
+        actor,
+        noteId,
+        versionId,
+        signal: request.signal,
+      })
+      if (isMockApiError(result)) {
+        return errorResponse(result)
+      }
+
+      const validated = noteVersionDetailDtoSchema.safeParse(result)
+      if (!validated.success) {
+        return errorResponse(createInternal('Version response failed contract validation.'))
       }
       return HttpResponse.json(validated.data)
     }),

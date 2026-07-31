@@ -172,6 +172,10 @@
   padding-left: 0.75rem;
 }
 
+.notes-virtual {
+  --notes-row-height: 56px;
+}
+
 .notes-virtual__scroller {
   height: min(28rem, 60vh);
   overflow: auto;
@@ -196,6 +200,11 @@
   padding: 0 0.75rem;
   box-sizing: border-box;
   border-bottom: 1px solid #ecece8;
+}
+
+.notes-virtual__row:not(.notes-virtual__row--header) {
+  height: var(--notes-row-height);
+  overflow: hidden;
 }
 
 .notes-virtual__cell--check {
@@ -297,17 +306,41 @@
 .notes-virtual__cell {
   min-width: 0;
   font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-virtual__cell--patient {
+  display: flex;
+  align-items: center;
+  min-height: 0;
 }
 
 .notes-virtual__patient {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
 }
 
-.notes-virtual__note-id {
+.notes-virtual__patient-link {
   display: block;
-  font-size: 0.75rem;
-  color: #6b6b6b;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  line-height: 1.25;
+}
+
+.notes-virtual__patient-link:focus-visible {
+  outline: 2px solid #1c2421;
+  outline-offset: 2px;
 }
 
 .notes-virtual__sort {

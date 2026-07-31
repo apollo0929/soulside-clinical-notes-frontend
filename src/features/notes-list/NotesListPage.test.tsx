@@ -279,7 +279,7 @@ describe('NotesListPage', () => {
     const loadedText = screen.getByText(/Showing (\d+) of 60 notes/).textContent ?? ''
     const loadedCount = Number(/Showing (\d+)/.exec(loadedText)?.[1] ?? 0)
     const domRows = document.querySelectorAll('[data-note-id]')
-    // Viewport ~400px / ~44px row ≈ 9 visible + overscan(8) on each side ⇒ well under 40.
+    // Viewport ~400px / ~56px row ≈ 7 visible + overscan(8) on each side ⇒ well under 40.
     expect(domRows.length).toBeGreaterThan(0)
     expect(domRows.length).toBeLessThanOrEqual(40)
     expect(domRows.length).toBeLessThan(loadedCount)

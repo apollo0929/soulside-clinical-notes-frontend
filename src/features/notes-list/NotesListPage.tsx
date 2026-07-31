@@ -62,6 +62,7 @@ const SEEDED_REVIEWER_OPTIONS = Object.freeze(
 
 export function NotesListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const listReturnTo = `/notes${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
 
   const urlFilters = useMemo(() => parseNotesListSearchParams(searchParams), [searchParams])
 
@@ -564,6 +565,7 @@ export function NotesListPage() {
             onToggleSelectAll={handleToggleSelectAll}
             pendingIds={pendingIds}
             selectionDisabled={mutationPending}
+            listReturnTo={listReturnTo}
           />
         ) : null}
       </section>

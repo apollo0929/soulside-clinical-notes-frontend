@@ -56,6 +56,14 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
 - Focused unit tests: `pnpm test -- src/features/notes-list src/services/api src/mock/services/bulk-actions.test.ts`
 - Playwright: `pnpm test:e2e -- e2e/notes-list.spec.ts e2e/notes-bulk.spec.ts`
 
+### Note detail (Step 7A — read-only)
+
+- Route: `/notes/:noteId` (patient name links from the list preserve list URL filters via navigation state).
+- Shows SOAP content, version history, word-level SOAP diff for any two selected versions, and review timeline.
+- Lifecycle actions are presented as a read-only availability summary (no mutations, no editor, no autosave).
+- Version bodies are fetched on demand for selected historical versions only.
+- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts`
+
 ## Scripts
 
 | Command              | Description                                          |
@@ -156,6 +164,7 @@ Unit tests should call `configureForTests()` so runs stay fast and deterministic
 
 - `GET /api/notes`
 - `GET /api/notes/:id`
+- `GET /api/notes/:noteId/versions/:versionId`
 - `POST /api/dev/seed`
 - `POST /api/notes/:id/transitions`
 - `POST /api/notes/:id/versions`
