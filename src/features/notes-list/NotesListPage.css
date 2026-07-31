@@ -1,0 +1,271 @@
+.notes-list-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 72rem;
+}
+
+.notes-list-page__header h1 {
+  margin-bottom: 0.35rem;
+}
+
+.notes-list-page__header p {
+  margin-bottom: 0;
+  color: #444;
+}
+
+.notes-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid #d8d8d4;
+  border-bottom: 1px solid #d8d8d4;
+}
+
+.notes-filters h2,
+.notes-list-page__results h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.notes-filters__status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.35rem 0.75rem;
+}
+
+.notes-filters__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.notes-filters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.notes-filters__grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.notes-filters__grid input,
+.notes-filters__grid select,
+.notes-filters button,
+.notes-list-empty button,
+.notes-list-error button,
+.notes-virtual__footer button,
+.notes-virtual__sort {
+  font: inherit;
+}
+
+.notes-filters__grid input,
+.notes-filters__grid select {
+  font-weight: 400;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #bdbdb8;
+  border-radius: 0.25rem;
+  background: #fff;
+}
+
+.notes-filters__grid input:focus-visible,
+.notes-filters__grid select:focus-visible,
+.notes-filters button:focus-visible,
+.notes-list-empty button:focus-visible,
+.notes-list-error button:focus-visible,
+.notes-virtual__footer button:focus-visible,
+.notes-virtual__sort:focus-visible,
+.notes-virtual__scroller:focus-visible {
+  outline: 2px solid #0b5fff;
+  outline-offset: 2px;
+}
+
+.notes-filters__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.notes-filters button,
+.notes-list-empty button,
+.notes-list-error button,
+.notes-virtual__footer button {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid #8a8a84;
+  border-radius: 0.25rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.notes-filters button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.notes-list-page__results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.notes-list-page__results-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.notes-list-page__status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.notes-list-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 20rem;
+}
+
+.notes-list-skeleton__row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.5fr 1fr 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.notes-list-skeleton__cell {
+  height: 2.25rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(90deg, #e8e8e4 0%, #f4f4f1 50%, #e8e8e4 100%);
+  background-size: 200% 100%;
+  animation: notes-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes notes-skeleton-pulse {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.notes-list-empty,
+.notes-list-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.25rem 0;
+}
+
+.notes-list-error {
+  border-left: 3px solid #b00020;
+  padding-left: 0.75rem;
+}
+
+.notes-virtual__scroller {
+  height: min(28rem, 60vh);
+  overflow: auto;
+  border: 1px solid #d8d8d4;
+  border-radius: 0.25rem;
+  background: #fff;
+}
+
+.notes-virtual__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f0f0ec;
+  border-bottom: 1px solid #d8d8d4;
+}
+
+.notes-virtual__row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.5fr 1fr 1fr 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0 0.75rem;
+  box-sizing: border-box;
+  border-bottom: 1px solid #ecece8;
+}
+
+.notes-virtual__row--header {
+  min-height: 2.5rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.notes-virtual__cell {
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.notes-virtual__patient {
+  display: block;
+  font-weight: 600;
+}
+
+.notes-virtual__note-id {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b6b6b;
+}
+
+.notes-virtual__sort {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.notes-status {
+  display: inline-block;
+  font-size: 0.8rem;
+}
+
+.notes-virtual__footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 2.5rem;
+  margin-top: 0.5rem;
+}
+
+.notes-virtual__footer p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 48rem) {
+  .notes-virtual__scroller {
+    overflow-x: auto;
+  }
+
+  .notes-virtual__table {
+    min-width: 48rem;
+  }
+}

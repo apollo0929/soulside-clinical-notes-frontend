@@ -20,14 +20,14 @@ export function AppLayout({ children }: AppLayoutProps) {
               <Link to="/">Home</Link>
             </li>
             <li>
-              <span aria-disabled="true">Notes</span>
+              <Link to="/notes">Notes</Link>
             </li>
           </ul>
         </nav>
       </header>
       <main>{children}</main>
       <footer>
-        <p>Step 0 — application shell</p>
+        <p>Soulside clinical notes — development build</p>
       </footer>
     </div>
   )

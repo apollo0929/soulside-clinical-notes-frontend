@@ -149,9 +149,57 @@ Aborted waits reject as typed `ABORTED`.
 applies declarative effects, appends one `ReviewEvent` on success, and uses
 copy-validate-commit semantics so failed transitions leave state unchanged.
 
-**Deferred to later steps:** React notes list UI, TanStack Query hooks, Zustand stores,
-editor/autosave, IndexedDB, offline replay, WebSocket/SSE, presence, telemetry, and
-three-way merge UI.
+**Deferred to later steps:** TanStack Query hooks beyond list, Zustand stores for
+selection/bulk actions, editor/autosave, IndexedDB, offline replay, WebSocket/SSE,
+presence, telemetry, and three-way merge UI.
+
+## Notes List Read Path
+
+The `/notes` route is a **read-only** list surface. Filter/search/sort state lives in the
+URL. TanStack Query owns server pages. Local React state is limited to ephemeral UI
+(draft search/date input text). There is no Zustand store for list filters.
+
+```mermaid
+flowchart LR
+  URL[URL search params] --> Parse[Typed parser]
+  Parse --> Key[Stable query key]
+  Key --> Query[TanStack infinite query]
+  Query --> API[Typed notes API]
+  API --> MSW[Mock REST endpoint]
+  Query --> Rows[Flattened loaded rows]
+  Rows --> Virtual[TanStack Virtual]
+  Virtual --> UI[Accessible notes list]
+```
+
+**URL as source of truth:** `status`, `reviewer`, `patient`, `from`, `to`, `q`, `sort`,
+and `direction` are parsed by a strict helper. Invalid values fall back to defaults;
+unknown keys are ignored. After parse, the address bar is **replace**-navigated to the
+canonical serialization (defaults omitted; statuses ordered by `NOTE_STATUSES`). Browser
+back/forward and copied URLs therefore restore list state.
+
+**TanStack Query:** `useInfiniteQuery` loads cursor pages (`initialPageParam = null`,
+limit 50). The query key includes filters/sort/search but **not** the cursor. Changing
+filters automatically resets pagination. AbortSignal cancels in-flight fetches so stale
+responses do not win.
+
+**Virtualization:** TanStack Virtual renders only visible rows (+ overscan) inside one
+scroll container with table roles for assistive tech. A **Load more** button remains as an
+accessible fallback beside automatic near-end fetching.
+
+**Debounced search:** The search input updates immediately; the URL/`q` query updates after
+~400 ms. Clearing search applies immediately. Debounce timers cancel on unmount.
+
+**Empty vs no-results:** With no filters and zero notes → “No notes are available.” With
+active filters/search and zero matches → “No notes match…” plus Clear filters. Errors show
+a typed message and Retry — never a misleading empty state.
+
+**Server-side sorting:** The UI does not re-sort flattened pages. The mock backend applies
+the requested sort plus note id as a stable secondary key.
+
+**Memory bound:** Only loaded cursor pages stay in memory/DOM — not the full 100k corpus.
+
+**Deferred to Step 6B+:** row selection, bulk actions, note detail, SOAP editor, autosave,
+conflict UI, IndexedDB/offline, realtime, presence, telemetry, and authentication UI.
 
 ## Version Creation and Concurrency
 

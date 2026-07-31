@@ -59,6 +59,13 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/features/notes-list/NotesVirtualList.tsx'],
+    rules: {
+      // TanStack Virtual's useVirtualizer returns unstable function identities; required by Step 6A.
+      'react-hooks/incompatible-library': 'off',
+    },
+  },
+  {
     files: ['**/*.{test,spec}.{ts,tsx}', 'src/test/**/*.{ts,tsx}', 'e2e/**/*.{ts,tsx}'],
     rules: {
       'react-refresh/only-export-components': 'off',

@@ -5,14 +5,22 @@ import { createRoot } from 'react-dom/client'
 
 import { App } from '@/app/App'
 
-const rootElement = document.getElementById('root')
+async function bootstrap(): Promise<void> {
+  if (import.meta.env.DEV) {
+    const { ensureDevMockBackend } = await import('@/services/api/dev-bootstrap')
+    await ensureDevMockBackend()
+  }
 
-if (!rootElement) {
-  throw new Error('Root element "#root" was not found')
+  const rootElement = document.getElementById('root')
+  if (!rootElement) {
+    throw new Error('Root element "#root" was not found')
+  }
+
+  createRoot(rootElement).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+void bootstrap()

@@ -36,6 +36,20 @@ pnpm dev
 
 Opens the Vite development server (default `http://localhost:5173`).
 
+In development, the app bootstraps the MSW mock backend once and seeds the default
+dataset (`seed: 42`, `noteCount: 48`) via `POST /api/dev/seed`. The active list actor is
+the fixed reviewer `usr_reviewer_42_0` (headers via the API client actor provider).
+
+### Notes list
+
+- Route: [`/notes`](http://localhost:5173/notes)
+- Filters/sort live in the URL. Examples:
+  - `/notes?status=APPROVED,IN_REVIEW`
+  - `/notes?q=avery&sort=patientDisplayName&direction=asc`
+  - `/notes?reviewer=usr_reviewer_42_0&from=2024-06-01T00:00:00.000Z`
+- Focused unit tests: `pnpm test -- src/features/notes-list src/services/api`
+- Playwright smoke: `pnpm test:e2e -- e2e/notes-list.spec.ts`
+
 ## Scripts
 
 | Command              | Description                                          |

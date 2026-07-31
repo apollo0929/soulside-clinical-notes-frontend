@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export function HomePage() {
   return (
     <section aria-labelledby="home-heading">
@@ -5,7 +7,7 @@ export function HomePage() {
       <p>Application shell is running. Domain features will be added in later steps.</p>
       <ul>
         <li>
-          <span>Notes</span> — placeholder (not implemented)
+          <Link to="/notes">Notes</Link> — list view with filters, search, and cursor pagination
         </li>
         <li>
           <span>Architecture status</span> — see docs/architecture.md
