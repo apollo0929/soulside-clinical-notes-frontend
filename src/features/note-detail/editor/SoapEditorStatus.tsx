@@ -13,9 +13,11 @@ export function SoapEditorStatus({
 }: SoapEditorStatusProps) {
   return (
     <div className="soap-editor__status">
-      <p className="soap-editor__save-label" data-testid="soap-editor-save-label">
-        {saveLabel}
-      </p>
+      {saveLabel ? (
+        <p className="soap-editor__save-label" data-testid="soap-editor-save-label">
+          {saveLabel}
+        </p>
+      ) : null}
       <p className="soap-editor__base-version">
         Editing base revision {baseRevision} ({baseVersionId})
       </p>

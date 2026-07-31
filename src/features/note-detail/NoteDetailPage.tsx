@@ -7,6 +7,11 @@ import { type NoteId, parseNoteId, parseUserId, type VersionId } from '@/domain/
 import type { NoteVersionRef } from '@/domain/models/note-version'
 import type { ReviewEvent } from '@/domain/models/review-event'
 import {
+  AutosaveStatusBanner,
+  autosaveStatusLabel,
+  useNoteAutosave,
+} from '@/features/note-detail/autosave'
+import {
   evaluateEditorAccess,
   resolveClinicianOwnerId,
   SoapEditor,
@@ -168,6 +173,13 @@ export function NoteDetailPage() {
     enabled: editorAccess.editable && noteId !== null && Boolean(aggregate),
   })
 
+  const autosave = useNoteAutosave({
+    enabled: editorAccess.editable && soapEditor.isEditing,
+    noteId,
+    editorState: soapEditor.state,
+    dispatch: soapEditor.dispatch,
+  })
+
   const actionDescriptors = useMemo(() => {
     if (!aggregate || !clinicianId) {
       return []
@@ -308,12 +320,16 @@ export function NoteDetailPage() {
           {soapEditor.isEditing && soapEditor.state ? (
             <SoapEditor
               state={soapEditor.state}
-              saveLabel={soapEditor.saveLabel}
+              saveLabel={autosaveStatusLabel(autosave.status)}
               baseRevision={
                 sortedVersions.find((version) => version.id === soapEditor.state!.baseVersionId)
                   ?.revisionNumber ?? aggregate.currentVersion.revisionNumber
               }
               newerVersionWarning={soapEditor.newerVersionWarning}
+              guardActive={autosave.guardActive}
+              autosaveSlot={
+                <AutosaveStatusBanner status={autosave.status} onRetry={autosave.retry} />
+              }
               editButtonRef={editButtonRef}
               onUpdateSection={(section, value) => {
                 soapEditor.dispatch({ type: 'UPDATE_SECTION', section, value })

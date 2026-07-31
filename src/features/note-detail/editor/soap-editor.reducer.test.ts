@@ -161,4 +161,74 @@ describe('soapEditorReducer', () => {
     expect(again.baseVersionId).toBe(versionB)
     expect(again.dirtySections.size).toBe(0)
   })
+
+  it('28–35: ACKNOWLEDGE_SAVED_VERSION preserves newer draft and rejects stale base', () => {
+    let state = init({ subjective: 'Old', objective: 'Obj' })
+    state = soapEditorReducer(state, {
+      type: 'UPDATE_SECTION',
+      section: 'subjective',
+      value: 'Draft newer',
+    })
+    const saved = buildSoapContent({ subjective: 'Saved A', objective: 'Obj' })
+    const acked = soapEditorReducer(state, {
+      type: 'ACKNOWLEDGE_SAVED_VERSION',
+      baseVersionId: versionB,
+      expectedBaseVersionId: versionA,
+      savedContent: saved,
+    })
+    expect(acked.baseVersionId).toBe(versionB)
+    expect(acked.initialContent.subjective).toBe('Saved A')
+    expect(acked.draftContent.subjective).toBe('Draft newer')
+    expect(acked.dirtySections.has('subjective')).toBe(true)
+    expect(acked.dirtySections.has('objective')).toBe(false)
+    expect(acked.initialContent).not.toBe(saved)
+
+    const clean = soapEditorReducer(
+      soapEditorReducer(init({ subjective: 'Same' }), {
+        type: 'UPDATE_SECTION',
+        section: 'subjective',
+        value: 'Same',
+      }),
+      {
+        type: 'ACKNOWLEDGE_SAVED_VERSION',
+        baseVersionId: versionB,
+        expectedBaseVersionId: versionA,
+        savedContent: buildSoapContent({ subjective: 'Same' }),
+      },
+    )
+    // UPDATE_SECTION to same value may no-op; acknowledge with equal draft clears dirty.
+    const dirtyThenEqual = soapEditorReducer(
+      soapEditorReducer(init({ subjective: 'Base' }), {
+        type: 'UPDATE_SECTION',
+        section: 'subjective',
+        value: 'Edited',
+      }),
+      {
+        type: 'ACKNOWLEDGE_SAVED_VERSION',
+        baseVersionId: versionB,
+        expectedBaseVersionId: versionA,
+        savedContent: buildSoapContent({ subjective: 'Edited' }),
+      },
+    )
+    expect(dirtyThenEqual.dirtySections.size).toBe(0)
+    expect(clean.baseVersionId).toBe(versionB)
+
+    const versionC = parseVersionId('ver_editor_c')
+    const advanced = soapEditorReducer(acked, {
+      type: 'ACKNOWLEDGE_SAVED_VERSION',
+      baseVersionId: versionC,
+      expectedBaseVersionId: versionB,
+      savedContent: buildSoapContent({ subjective: 'Saved B', objective: 'Obj' }),
+    })
+    expect(advanced.baseVersionId).toBe(versionC)
+
+    const stale = soapEditorReducer(advanced, {
+      type: 'ACKNOWLEDGE_SAVED_VERSION',
+      baseVersionId: versionB,
+      expectedBaseVersionId: versionA,
+      savedContent: saved,
+    })
+    expect(stale).toBe(advanced)
+    expect(stale.draftContent.subjective).toBe('Draft newer')
+  })
 })

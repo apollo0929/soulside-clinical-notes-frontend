@@ -1,6 +1,35 @@
-import { cloneSoapContent, type SoapSectionKey } from '@/domain/models/soap'
+import { cloneSoapContent, type SoapContent, type SoapSectionKey } from '@/domain/models/soap'
 
 import type { SoapEditorAction, SoapEditorState } from './soap-editor.types'
+
+export function soapContentEquals(a: SoapContent, b: SoapContent): boolean {
+  return (
+    a.subjective === b.subjective &&
+    a.objective === b.objective &&
+    a.assessment === b.assessment &&
+    a.plan === b.plan
+  )
+}
+
+function recalculateDirtySections(
+  initialContent: SoapContent,
+  draftContent: SoapContent,
+): ReadonlySet<SoapSectionKey> {
+  const dirty = new Set<SoapSectionKey>()
+  if (draftContent.subjective !== initialContent.subjective) {
+    dirty.add('subjective')
+  }
+  if (draftContent.objective !== initialContent.objective) {
+    dirty.add('objective')
+  }
+  if (draftContent.assessment !== initialContent.assessment) {
+    dirty.add('assessment')
+  }
+  if (draftContent.plan !== initialContent.plan) {
+    dirty.add('plan')
+  }
+  return dirty
+}
 
 function cloneDirtySections(dirty: ReadonlySet<SoapSectionKey>): Set<SoapSectionKey> {
   return new Set(dirty)
@@ -86,15 +115,11 @@ export function soapEditorReducer(
       }
     }
     case 'RESET_ALL': {
-      if (state.dirtySections.size === 0) {
-        const draftMatches =
-          state.draftContent.subjective === state.initialContent.subjective &&
-          state.draftContent.objective === state.initialContent.objective &&
-          state.draftContent.assessment === state.initialContent.assessment &&
-          state.draftContent.plan === state.initialContent.plan
-        if (draftMatches) {
-          return state
-        }
+      if (
+        state.dirtySections.size === 0 &&
+        soapContentEquals(state.draftContent, state.initialContent)
+      ) {
+        return state
       }
       return {
         ...state,
@@ -110,6 +135,32 @@ export function soapEditorReducer(
         initialContent,
         draftContent: cloneSoapContent(initialContent),
         dirtySections: new Set<SoapSectionKey>(),
+      }
+    }
+    case 'ACKNOWLEDGE_SAVED_VERSION': {
+      // Ignore stale acknowledgments that would move the base backward or sideways.
+      if (
+        state.baseVersionId !== action.expectedBaseVersionId &&
+        state.baseVersionId !== action.baseVersionId
+      ) {
+        return state
+      }
+      const initialContent = cloneSoapContent(action.savedContent)
+      const dirtySections = recalculateDirtySections(initialContent, state.draftContent)
+      if (
+        state.baseVersionId === action.baseVersionId &&
+        soapContentEquals(state.initialContent, initialContent) &&
+        dirtySections.size === state.dirtySections.size &&
+        [...dirtySections].every((section) => state.dirtySections.has(section))
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        baseVersionId: action.baseVersionId,
+        initialContent,
+        draftContent: state.draftContent,
+        dirtySections,
       }
     }
     default: {

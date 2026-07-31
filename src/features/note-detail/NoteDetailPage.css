@@ -241,6 +241,35 @@
   margin-right: 0.75rem;
 }
 
+.autosave-status {
+  margin: 0.75rem 0 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.autosave-status__label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.autosave-status__conflict-action {
+  margin: 0;
+  color: var(--note-detail-muted);
+}
+
+.autosave-status__retry {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--note-detail-ink);
+  border-radius: 0.25rem;
+  background: #fff;
+}
+
 .note-detail-page__diff-error {
   border: 1px solid var(--note-detail-removed);
   padding: 0.75rem 1rem;

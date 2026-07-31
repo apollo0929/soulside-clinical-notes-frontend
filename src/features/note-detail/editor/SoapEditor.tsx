@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useId, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react'
 
 import { SOAP_SECTION_KEYS, type SoapEditorState, type SoapSectionKey } from './soap-editor.types'
 import { SoapEditorSection } from './SoapEditorSection'
@@ -11,6 +11,8 @@ export type SoapEditorProps = {
   readonly saveLabel: string
   readonly baseRevision: number
   readonly newerVersionWarning: boolean
+  readonly guardActive?: boolean
+  readonly autosaveSlot?: ReactNode
   readonly onUpdateSection: (section: SoapSectionKey, value: string) => void
   readonly onResetSection: (section: SoapSectionKey) => void
   readonly onDiscardAndExit: () => void
@@ -23,6 +25,8 @@ export function SoapEditor({
   saveLabel,
   baseRevision,
   newerVersionWarning,
+  guardActive = false,
+  autosaveSlot = null,
   onUpdateSection,
   onResetSection,
   onDiscardAndExit,
@@ -32,7 +36,7 @@ export function SoapEditor({
   const headingId = useId()
   const [discardOpen, setDiscardOpen] = useState(false)
   const dirty = state.dirtySections.size > 0
-  const { blocker, confirmStay, confirmLeave } = useUnsavedNavigationGuard(dirty)
+  const { blocker, confirmStay, confirmLeave } = useUnsavedNavigationGuard(dirty || guardActive)
   const focusedOnOpen = useRef(false)
   const navBlocked = blocker.state === 'blocked'
   // Single confirmation surface: navigation block supersedes in-editor discard.
@@ -85,11 +89,12 @@ export function SoapEditor({
       </h2>
 
       <SoapEditorStatus
-        saveLabel={saveLabel}
+        saveLabel={autosaveSlot ? '' : saveLabel}
         baseRevision={baseRevision}
         baseVersionId={String(state.baseVersionId)}
         newerVersionWarning={newerVersionWarning}
       />
+      {autosaveSlot}
 
       <form
         className="soap-editor__form"

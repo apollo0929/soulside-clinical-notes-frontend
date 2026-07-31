@@ -329,20 +329,21 @@ flowchart LR
 
 ## SOAP Editor State
 
-Step 7B adds a **client-only** SOAP editor on Note Detail. TanStack Query still owns the
-server `currentVersion`. The editor reducer owns an immutable local draft. The editor never
-mutates the query cache, `NoteVersion` domain objects, API DTOs, or the mock database.
+Step 7B added the SOAP editor on Note Detail. TanStack Query owns the server
+`currentVersion`. The editor reducer owns an immutable local draft. Step 8 autosave updates
+the detail cache only through pure reconciliation helpers after a successful create-version.
 
-**Immutable reducer:** `INITIALIZE`, `UPDATE_SECTION`, `RESET_SECTION`, `RESET_ALL`, and
-`ACCEPT_SAVED_VERSION` (reserved for Step 8 after a successful save). Nested SOAP objects are
-cloned and frozen so callers cannot mutate editor state by reference.
+**Immutable reducer:** `INITIALIZE`, `UPDATE_SECTION`, `RESET_SECTION`, `RESET_ALL`,
+`ACCEPT_SAVED_VERSION` (full replace), and `ACKNOWLEDGE_SAVED_VERSION` (advance base /
+initial while preserving any newer local draft). Nested SOAP objects are cloned and frozen.
 
 **Section-level dirty tracking:** Each of `subjective` / `objective` / `assessment` / `plan`
 is tracked independently in a `ReadonlySet`. Dirty comparison uses **exact string equality**
 (no trim) because whitespace may be clinically meaningful.
 
 **baseVersionId:** The editor records the server version id it was initialized from. Only the
-current head initializes the editor; historical version bodies never do.
+current head initializes the editor; historical version bodies never do. Successful autosave
+acknowledgments advance `baseVersionId` via `ACKNOWLEDGE_SAVED_VERSION`.
 
 **Access-policy composition:** `authorize(NOTE_EDIT)` then `evaluateVersionSavePolicy`.
 Editable statuses remain `IN_REVIEW` (assigned reviewer or ADMIN), `REJECTED` / `AMENDED`
@@ -354,16 +355,13 @@ on a dirty editor confirms, restores initial content, and exits edit mode. Versi
 remains separate and is hidden while editing.
 
 **Unsaved navigation protection:** React Router `useBlocker` (data router) blocks in-app
-navigation while dirty; `beforeunload` is registered only while dirty. Confirmations never
+navigation while dirty **or** while autosave has unacked work (debouncing / saving / queued /
+retryable error / conflict); `beforeunload` follows the same guard. Confirmations never
 include clinical text.
 
 **Incoming server version:** Pure `evaluateEditorReinitialization` decides
 `NO_CHANGE` / `REINITIALIZE` / `PRESERVE_DIRTY_AND_WARN`. Dirty drafts are never overwritten;
-a non-destructive newer-version warning is shown instead. Conflict merge and save are Step 8+.
-
-**Why save/autosave is deferred:** Step 7B proves local draft correctness, dirty tracking,
-access gating, and navigation safety without create-version mutations, debounce-to-server,
-`clientMutationId`, or optimistic cache writes.
+a non-destructive newer-version warning is shown instead. Three-way merge UI is Step 9.
 
 ```mermaid
 flowchart LR
@@ -372,9 +370,95 @@ flowchart LR
   Draft --> Dirty[Section dirty selectors]
   Dirty --> UI[Editor status]
   Draft --> Guard[Unsaved navigation guard]
+  Draft --> Autosave[Debounced autosave]
+  Autosave --> Guard
   DetailQuery --> Sync[Reinitialization policy]
   Sync -->|clean + new version| Init
   Sync -->|dirty + new version| Preserve[Preserve draft + warning]
+```
+
+## Autosave and Serialized Version Creation
+
+Step 8 wires the SOAP editor to `POST /api/notes/:id/versions` through a **note-scoped
+AutosaveCoordinator** (framework-independent). React owns debounce and UI; the coordinator
+owns request serialization.
+
+**700ms debounce:** Local typing updates the reducer immediately. Server saves start only after
+`AUTOSAVE_DEBOUNCE_MS` (700) of quiet. Rapid edits reset the timer. Clean drafts, closed edit
+mode, revoked access, and `CONFLICT` cancel pending debounce and do not schedule saves.
+Retryable `ERROR` pauses automatic enqueue until explicit Retry (no rapid infinite loop).
+
+**One in-flight save:** At most one create-version request per open edit session. Edits during
+an in-flight save replace a single coalesced follow-up intent (latest content only).
+
+**Follow-up coalescing:** When the in-flight save succeeds, if queued content still differs
+from the saved content, exactly one follow-up starts with:
+
+- `baseVersionId` = returned version id
+- a **new** `clientMutationId`
+- the latest queued SOAP content
+
+If queued content equals the just-saved content, no follow-up is sent.
+
+**clientMutationId:** Generated only through `ClientMutationIdGenerator` (`crypto.randomUUID`
+in the browser; deterministic sequence in tests). Every genuinely new save gets a new id.
+Retries of the exact failed intent reuse the same id. Follow-ups and future conflict-resolution
+saves (Step 9) require a new id. No `Math.random`.
+
+**Acknowledgment:** Success dispatches `ACKNOWLEDGE_SAVED_VERSION`, which advances
+`initialContent` / `baseVersionId` and recalculates dirty sections against the saved content
+**without** replacing a newer local draft. Stale acknowledgments that neither match the
+expected prior base nor the already-acked version are ignored. `ACCEPT_SAVED_VERSION` remains
+available for full replacement when needed.
+
+**Status state machine (discriminated):** `CLEAN` | `DEBOUNCING` | `SAVING` | `QUEUED` |
+`SAVED` | `ERROR` (retryable flag) | `CONFLICT`. UI labels are unambiguous; `aria-live="polite"`
+does not claim Saved before server acknowledgment.
+
+**Retry:** Manual Retry for network / 5xx only. Reuses the failed intent (same mutation id,
+base, content). Newer queued drafts follow after a successful retry. 403 / validation are
+non-retryable. Aborts from dispose are not shown as save failures.
+
+**Conflict (Step 8):** HTTP 409 `version_conflict` enters `CONFLICT`, preserves the local
+draft and dirty set, drops queued automatic follow-ups, and stops autosave. No merge UI yet —
+only “Conflict resolution required” plus a preservation message.
+
+**Query-cache reconciliation:** On success, pure helpers update the note-detail cache
+(current version, content from the saved command, revision / parent from the response, actor
+for authorship). Success DTO has no timestamp, so prior `updatedAt` / `createdAt` are retained
+and detail is soft-invalidated for a later authoritative refresh — timestamps are not
+fabricated. Version history appends the new ref once (idempotent on replay). List queries are
+invalidated without wiping visible rows.
+
+**Navigation / disposal:** In-flight or queued work keeps the navigation guard active. Session
+dispose clears the debounce timer, aborts in-flight fetch when appropriate, and drops
+listeners. Intentional discard abort does not surface as a user-facing save error.
+
+**Deferred to Step 9:** three-way conflict resolution UI, merge controls, conflict diff
+rendering, IndexedDB / offline queue / replay, SSE/WebSocket, presence, telemetry.
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant E as Editor
+  participant C as Autosave coordinator
+  participant API as Create-version API
+  participant S as Mock server
+
+  U->>E: Edit section
+  E->>C: Debounced save intent
+  C->>API: Save A(base v5, mutation A)
+  U->>E: Edit again
+  E->>C: Replace queued intent with latest
+  API->>S: POST version A
+  S-->>API: Version v6
+  API-->>C: Ack A
+  C->>E: Advance initial/base, preserve newer draft
+  C->>API: Save B(base v6, mutation B)
+  API->>S: POST version B
+  S-->>API: Version v7
+  API-->>C: Ack B
+  C->>E: Clean latest draft
 ```
 
 ## Version Creation and Concurrency
@@ -410,11 +494,12 @@ found (single-parent lineages). Cycles / missing parents / cross-note versions a
 ADMIN). `READY_FOR_REVIEW`, `GENERATING`, `FAILED`, `APPROVED`, and `LOCKED` deny saves.
 Authorization still requires `NOTE_EDIT` first.
 
-Client autosave coordination and three-way merge UI remain future steps.
+Client autosave coordination is implemented in Step 8 (above). Three-way merge UI remains
+Step 9.
 
 ```mermaid
 sequenceDiagram
-  participant C as Future client
+  participant C as Client autosave
   participant H as MSW handler
   participant S as Create-version service
   participant I as Idempotency registry

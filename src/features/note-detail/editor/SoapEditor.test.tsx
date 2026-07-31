@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { http } from 'msw'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -125,7 +126,7 @@ describe('SoapEditor UI', () => {
     expect(screen.queryByRole('button', { name: 'Edit note' })).not.toBeInTheDocument()
   })
 
-  it('48–53: independent dirty indicators, reset section, and summary', async () => {
+  it('48–53: independent dirty indicators, reset section, and autosave waiting label', async () => {
     const noteId = editableNoteId()
     const note = backend.database.getNote(parseNoteId(noteId))!
     const version = backend.database.getVersion(note.currentVersionId)!
@@ -135,18 +136,19 @@ describe('SoapEditor UI', () => {
       target: { value: `${version.content.subjective} edited` },
     })
     expect(document.getElementById('soap-editor-subjective-status')).toHaveTextContent('Modified')
-    expect(screen.getByTestId('soap-editor-save-label')).toHaveTextContent('1 unsaved section')
+    expect(screen.getByTestId('soap-editor-save-label')).toHaveTextContent('Waiting to save')
 
     fireEvent.change(screen.getByLabelText('Plan'), {
       target: { value: `${version.content.plan} plan` },
     })
-    expect(screen.getByTestId('soap-editor-save-label')).toHaveTextContent('2 unsaved sections')
+    expect(document.getElementById('soap-editor-plan-status')).toHaveTextContent('Modified')
+    expect(screen.getByTestId('soap-editor-save-label')).toHaveTextContent('Waiting to save')
 
     fireEvent.change(screen.getByLabelText('Subjective'), {
       target: { value: version.content.subjective },
     })
     expect(document.getElementById('soap-editor-subjective-status')).toHaveTextContent('Saved')
-    expect(screen.getByTestId('soap-editor-save-label')).toHaveTextContent('1 unsaved section')
+    expect(document.getElementById('soap-editor-plan-status')).toHaveTextContent('Modified')
 
     fireEvent.change(screen.getByLabelText('Objective'), {
       target: { value: 'temporary objective' },
@@ -157,6 +159,13 @@ describe('SoapEditor UI', () => {
   })
 
   it('54–59: discard confirmation, stay, discard exit, and focus return', async () => {
+    // Keep create-version hanging so discard/nav assertions are not raced by autosave ack.
+    server.use(
+      http.post('*/api/notes/:id/versions', async () => {
+        await new Promise(() => undefined)
+        return undefined
+      }),
+    )
     const noteId = editableNoteId()
     await openEditor(noteId)
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
@@ -181,7 +190,7 @@ describe('SoapEditor UI', () => {
     expect(screen.getByRole('button', { name: 'Edit note' })).toHaveFocus()
   })
 
-  it('60–63: historical versions stay read-only; no save request or cache mutation', async () => {
+  it('60–63: historical versions stay read-only; no immediate save before debounce', async () => {
     const noteId = editableNoteId()
     const { queryClient } = await openEditor(noteId)
     const detailKey = notesKeys.detail(parseNoteId(noteId))
@@ -229,6 +238,12 @@ describe('SoapEditor UI', () => {
   })
 
   it('68–74: internal navigation blocked; stay/leave; no clinical text in dialog', async () => {
+    server.use(
+      http.post('*/api/notes/:id/versions', async () => {
+        await new Promise(() => undefined)
+        return undefined
+      }),
+    )
     const noteId = editableNoteId()
     const { router } = await openEditor(noteId)
     fireEvent.change(screen.getByLabelText('Plan'), { target: { value: 'secret clinical plan' } })
@@ -321,6 +336,12 @@ describe('SoapEditor UI', () => {
   })
 
   it('discard dialog yields to a single navigation confirmation', async () => {
+    server.use(
+      http.post('*/api/notes/:id/versions', async () => {
+        await new Promise(() => undefined)
+        return undefined
+      }),
+    )
     const noteId = editableNoteId()
     const { router } = await openEditor(noteId)
     fireEvent.change(screen.getByLabelText('Subjective'), { target: { value: 'draft' } })

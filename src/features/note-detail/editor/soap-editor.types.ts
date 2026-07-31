@@ -34,6 +34,14 @@ export type SoapEditorAction =
       readonly baseVersionId: VersionId
       readonly content: SoapContent
     }
+  | {
+      readonly type: 'ACKNOWLEDGE_SAVED_VERSION'
+      /** Newly created version id from the server. */
+      readonly baseVersionId: VersionId
+      /** The baseVersionId the save request used; rejects stale acks. */
+      readonly expectedBaseVersionId: VersionId
+      readonly savedContent: SoapContent
+    }
 
 export type EditorAccessDecision =
   | { readonly editable: true }
