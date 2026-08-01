@@ -574,8 +574,9 @@ new mutation id. There is no automatic retry.
 over the ordinary discard dialog (only one confirmation surface). Leaving silently is not
 allowed.
 
-**Still deferred (offline replay):** IndexedDB, offline queue, and offline replay remain
-future work — conflict resolution here is online-only.
+**Still deferred:** SSE / WebSocket missed-event replay, presence, telemetry, CRDT, and PWA
+background sync remain out of scope for Step 9–10 online conflict resolution. Offline queue
+and resumable replay are covered in **Offline Queue and Resumability** below.
 
 ```mermaid
 sequenceDiagram
@@ -594,4 +595,118 @@ sequenceDiagram
   R->>S: POST resolved content, base v7, new mutation ID
   S-->>R: Version v8
   R->>E: Set clean resolved draft, base v8
+```
+
+## Offline Queue and Resumability
+
+Step 10 adds durable offline writes and resumable replay. Dependency direction:
+
+`Editor/autosave → OfflineWriteQueue abstraction → Dexie → ReplayCoordinator → create-version API → conflict resolver`
+
+React components never touch Dexie tables directly.
+
+### IndexedDB schema (v1)
+
+Database name: `soulside-offline-v1` (tests use deterministic unique names).
+
+| Store               | Key        | Purpose                                    |
+| ------------------- | ---------- | ------------------------------------------ |
+| `queuedWrites`      | `id`       | Persistent create-version intents          |
+| `cachedNoteDetails` | `noteId`   | Note detail aggregates for reload survival |
+| `cachedNoteLists`   | `queryKey` | Canonical list query pages                 |
+| `replayMetadata`    | `id`       | Replay bookkeeping                         |
+
+Migrations: bump Dexie `version()` and use `.upgrade()` — do not mutate v1 stores in place.
+Only v1 exists today.
+
+Queue entry fields include `fingerprint`, `predecessorQueueId`, and optional `conflictPayload`.
+Content is defensively cloned on write/read. No `Response` objects or functions are stored.
+
+### Queue identity and coalescing
+
+- **Queue entry `id`**: local storage identity (`qw_…`)
+- **`clientMutationId`**: server idempotency identity — **never regenerated on replay**
+
+**Coalescing policy (safer recommended rule):**
+
+1. At most one unsent `QUEUED` entry per note (no predecessor).
+2. Changed content → **new** `clientMutationId`; prior unsent entry removed atomically.
+3. Same fingerprint as the existing unsent entry → keep existing entry (reload-safe; preserves mutation id).
+4. While `REPLAYING`, at most one follow-up `QUEUED` linked via `predecessorQueueId`.
+5. Do not create an unbounded entry per keystroke.
+
+### Replay order and concurrency
+
+- Same-note writes never run concurrently; order is `createdAt`.
+- Cross-note concurrency limit: **2**.
+- On success, follow-up `baseVersionId` advances to the returned version via predecessor linkage.
+- One note’s failure / conflict does not block other notes.
+- Replay uses an injectable scheduler so unit tests never sleep real multi-second backoff.
+
+### Retry / backoff
+
+Transient network / 5xx: exponential backoff `1s → 2s → 4s → …` capped at `30s`, max 6 attempts
+per cycle, then `FAILED` (entry retained; manual Retry). `403` / `400` do not retry.
+`clientMutationId` is preserved across retries.
+
+### Conflict routing
+
+On 409 during replay: mark `BLOCKED_CONFLICT`, stop that note’s replay, keep the entry,
+expose the existing Step 9 resolver with queued local content + stored conflict payload.
+Resolution success removes the blocked entry, advances any predecessor-linked follow-ups
+to the resolved head version, and uses a **new** mutation id for the resolved write (Step 9 rules).
+No automatic overwrite or silent rebase.
+
+### Read-cache persistence
+
+Focused IndexedDB cache for note detail + list pages (canonical query key). Hydrated into
+TanStack Query on startup. Queries use `networkMode: 'offlineFirst'`. Cached UI shows a
+stale/offline indicator. Clinical content is **never** stored in `localStorage`.
+
+**Production caveat:** clinical data at rest in IndexedDB would require encryption and device
+policy in production. This take-home does **not** claim HIPAA compliance.
+
+### Locally durable vs server-saved
+
+Once a write is confirmed in IndexedDB it is reload-safe (**locally durable**). Status shows
+“Saved on this device — waiting to sync…”, **not** “Saved”. Internal navigation /
+`beforeunload` data-loss blockers clear only when the latest draft is already flushed to the
+queue (`QUEUED_OFFLINE` / `REPLAYING` / `SYNC_FAILED` and not dirty). While durable, further
+edits use zero debounce so coalesces reach IndexedDB quickly. The connectivity banner still
+states the change is not server-synchronized. Conflict / failed replay remains visibly warned.
+Discard clears all queue rows for that note so discarded content cannot replay later.
+
+### Draft restore after reload
+
+Editor draft is restored from the **queued write** in IndexedDB (`RESTORE_OFFLINE_DRAFT`),
+not from a separate editor-state persistence layer.
+
+### Startup restore
+
+Idempotent `ensureOfflineBootstrap`: open IndexedDB → hydrate query cache → start connectivity
+→ start replay when not offline. Safe under React Strict Mode. Offline startup tolerates
+missing backend seed when cache exists.
+
+```mermaid
+sequenceDiagram
+  participant E as Editor
+  participant Q as IndexedDB queue
+  participant R as Replay coordinator
+  participant S as Server
+
+  E->>Q: Persist write while offline
+  Q-->>E: Locally durable
+  Note over E: Reload / offline
+  E->>Q: Restore cached note + queued write
+  Note over R: Connectivity returns
+  R->>Q: Load queued writes
+  R->>S: Replay same clientMutationId
+  alt success
+    S-->>R: New version
+    R->>Q: Remove entry
+  else conflict
+    S-->>R: 409
+    R->>Q: Mark BLOCKED_CONFLICT
+    R-->>E: Open existing resolver
+  end
 ```

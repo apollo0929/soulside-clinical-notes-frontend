@@ -1,6 +1,6 @@
 import './NotesListPage.css'
 
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { parseIsoDateTime } from '@/domain/datetime'
@@ -35,6 +35,7 @@ import { getNotesListErrorMessage, useNotesList } from '@/features/notes-list/us
 import { DEFAULT_DEV_SEED, getActorIdentity } from '@/services/api/actor-provider'
 import { isApiClientError } from '@/services/api/api-errors'
 import type { NotesListSortDirection, NotesListSortField } from '@/services/api/notes-api'
+import { getConnectivityService } from '@/services/offline/connectivity'
 
 function applyFiltersToSearchParams(
   current: URLSearchParams,
@@ -437,6 +438,14 @@ export function NotesListPage() {
 
   const isInitialLoading = query.isPending && rows.length === 0
   const isError = query.isError && rows.length === 0
+  const connectivity = getConnectivityService()
+  const connectivityState = useSyncExternalStore(
+    (listener) => connectivity.subscribe(() => listener()),
+    () => connectivity.getSnapshot(),
+    () => connectivity.getSnapshot(),
+  )
+  const offlineStale = rows.length > 0 && connectivityState.kind === 'OFFLINE'
+  const offlineUnavailable = isError && connectivityState.kind === 'OFFLINE'
   const isEmptyDataset =
     query.isSuccess && rows.length === 0 && !hasActiveFilters && filters.searchQuery === ''
   const isNoResults =
@@ -445,6 +454,9 @@ export function NotesListPage() {
   const statusMessage = (() => {
     if (isInitialLoading) {
       return 'Loading notes.'
+    }
+    if (offlineUnavailable) {
+      return 'Notes are unavailable offline.'
     }
     if (isError) {
       return getNotesListErrorMessage(query.error)
@@ -469,6 +481,16 @@ export function NotesListPage() {
         <h1 id="notes-list-heading">Clinical notes</h1>
         <p>Browse notes with server-side filters, search, and cursor pagination.</p>
       </header>
+      {offlineStale ? (
+        <p
+          className="offline-stale-indicator"
+          role="status"
+          aria-live="polite"
+          data-testid="offline-stale-indicator"
+        >
+          Showing cached list — not refreshed from the server.
+        </p>
+      ) : null}
 
       <NotesFilters
         filters={filters}
@@ -533,7 +555,15 @@ export function NotesListPage() {
 
         {isInitialLoading ? <NotesListSkeleton /> : null}
 
-        {isError ? (
+        {offlineUnavailable ? (
+          <NotesListErrorState
+            message="Notes are unavailable offline. Connect to the network to load this view."
+            onRetry={() => {
+              void query.refetch()
+            }}
+          />
+        ) : null}
+        {isError && !offlineUnavailable ? (
           <NotesListErrorState
             message={getNotesListErrorMessage(query.error)}
             onRetry={() => {

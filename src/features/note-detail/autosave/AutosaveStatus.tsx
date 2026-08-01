@@ -8,8 +8,8 @@ export type AutosaveStatusBannerProps = {
 
 export function AutosaveStatusBanner({ status, onRetry }: AutosaveStatusBannerProps) {
   const label = autosaveStatusLabel(status)
-  const showRetry = status.kind === 'ERROR' && status.retryable
-  const isConflict = status.kind === 'CONFLICT'
+  const showRetry = (status.kind === 'ERROR' && status.retryable) || status.kind === 'SYNC_FAILED'
+  const isConflict = status.kind === 'CONFLICT' || status.kind === 'BLOCKED_CONFLICT'
 
   return (
     <div className="autosave-status" data-testid="autosave-status">

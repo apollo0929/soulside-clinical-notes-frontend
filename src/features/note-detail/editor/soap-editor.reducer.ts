@@ -163,6 +163,24 @@ export function soapEditorReducer(
         dirtySections,
       }
     }
+    case 'RESTORE_OFFLINE_DRAFT': {
+      const draftContent = cloneSoapContent(action.draftContent)
+      const dirtySections = recalculateDirtySections(state.initialContent, draftContent)
+      if (
+        state.baseVersionId === action.baseVersionId &&
+        soapContentEquals(state.draftContent, draftContent) &&
+        dirtySections.size === state.dirtySections.size &&
+        [...dirtySections].every((section) => state.dirtySections.has(section))
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        baseVersionId: action.baseVersionId,
+        draftContent,
+        dirtySections,
+      }
+    }
     default: {
       const _exhaustive: never = action
       return _exhaustive

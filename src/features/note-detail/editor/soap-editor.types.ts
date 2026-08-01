@@ -42,6 +42,12 @@ export type SoapEditorAction =
       readonly expectedBaseVersionId: VersionId
       readonly savedContent: SoapContent
     }
+  | {
+      /** Restore a draft from the IndexedDB offline queue after reload. */
+      readonly type: 'RESTORE_OFFLINE_DRAFT'
+      readonly baseVersionId: VersionId
+      readonly draftContent: SoapContent
+    }
 
 export type EditorAccessDecision =
   | { readonly editable: true }

@@ -27,6 +27,25 @@ export type AutosaveStatus =
       readonly kind: 'CONFLICT'
       readonly conflict: VersionConflictResponseDto
     }
+  | {
+      readonly kind: 'QUEUED_OFFLINE'
+      readonly mutationId: ClientMutationId
+      readonly queueId: string
+    }
+  | {
+      readonly kind: 'REPLAYING'
+      readonly mutationId: ClientMutationId
+    }
+  | {
+      readonly kind: 'SYNC_FAILED'
+      readonly mutationId: ClientMutationId
+      readonly message: string
+    }
+  | {
+      readonly kind: 'BLOCKED_CONFLICT'
+      readonly mutationId: ClientMutationId
+      readonly conflict: VersionConflictResponseDto
+    }
 
 export type SaveSuccessEvent = {
   readonly intent: SaveIntent
@@ -52,4 +71,14 @@ export type AutosaveCoordinatorDeps = {
   readonly transport: CreateVersionTransport
   readonly nextMutationId: () => ClientMutationId
   readonly onSuccess: (event: SaveSuccessEvent) => void
+  /**
+   * Persist a create-version intent to IndexedDB when the network is unavailable.
+   * Returns queue entry identity. Must not throw for storage success paths.
+   */
+  readonly persistOfflineWrite?: (intent: SaveIntent) => Promise<{
+    readonly queueId: string
+    readonly clientMutationId: ClientMutationId
+  }>
+  /** Hint that the device is offline — skip the network attempt and queue locally. */
+  readonly isOffline?: () => boolean
 }

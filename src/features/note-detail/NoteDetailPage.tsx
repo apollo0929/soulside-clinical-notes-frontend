@@ -1,6 +1,6 @@
 import './NoteDetailPage.css'
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
 import { type NoteId, parseNoteId, parseUserId, type VersionId } from '@/domain/ids'
@@ -13,6 +13,10 @@ import {
   autosaveStatusLabel,
   useNoteAutosave,
 } from '@/features/note-detail/autosave'
+import {
+  conflictFromAutosaveStatus,
+  useOfflineQueueRestore,
+} from '@/features/note-detail/autosave/use-offline-queue-restore'
 import {
   type ConflictLocalSnapshot,
   ConflictResolver,
@@ -48,6 +52,9 @@ import {
 import { VersionHistory } from '@/features/note-detail/VersionHistory'
 import { getActorIdentity } from '@/services/api/actor-provider'
 import { isApiClientError, isNetworkApiError } from '@/services/api/api-errors'
+import { getConnectivityService } from '@/services/offline/connectivity'
+import { createQueuedWriteRepository } from '@/services/offline/queued-write.repository'
+import { subscribeReplaySuccess } from '@/services/offline/replay-success-bus'
 
 function tryParseNoteId(raw: string | undefined): NoteId | null {
   if (!raw) {
@@ -187,20 +194,54 @@ export function NoteDetailPage() {
     dispatch: soapEditor.dispatch,
   })
 
+  useEffect(() => {
+    if (!noteId) {
+      return
+    }
+    return subscribeReplaySuccess((event) => {
+      if (event.noteId !== noteId) {
+        return
+      }
+      soapEditor.dispatch({
+        type: 'ACCEPT_SAVED_VERSION',
+        baseVersionId: event.versionId,
+        content: event.content,
+      })
+      autosave.applyReplaySuccess({
+        versionId: event.versionId,
+        content: event.content,
+        mutationId: event.mutationId,
+      })
+    })
+  }, [autosave, noteId, soapEditor])
+
+  useOfflineQueueRestore({
+    noteId,
+    enabled: editorAccess.editable && Boolean(aggregate),
+    serverContent: aggregate?.currentVersion.content ?? null,
+    soapEditor,
+    autosave,
+  })
+
   type ConflictHold = {
     readonly dto: VersionConflictResponseDto
     readonly snapshot: ConflictLocalSnapshot
   }
   const [conflictHold, setConflictHold] = useState<ConflictHold | null>(null)
-  const inConflict = autosave.status.kind === 'CONFLICT'
+  const conflictDto = conflictFromAutosaveStatus(autosave.status)
+  const inConflict = conflictDto !== null
 
   // Capture local draft once when CONFLICT begins; clear when autosave leaves CONFLICT.
-  if (inConflict && soapEditor.state && conflictHold === null) {
+  if (inConflict && soapEditor.state && conflictHold === null && conflictDto) {
     setConflictHold({
-      dto: autosave.status.conflict,
+      dto: conflictDto,
       snapshot: {
         noteId: soapEditor.state.noteId,
-        localBaseVersionId: soapEditor.state.baseVersionId,
+        localBaseVersionId:
+          autosave.status.kind === 'BLOCKED_CONFLICT'
+            ? // Prefer queued base when restoring from offline conflict.
+              soapEditor.state.baseVersionId
+            : soapEditor.state.baseVersionId,
         localContent: cloneSoapContent(soapEditor.state.draftContent),
       },
     })
@@ -222,6 +263,21 @@ export function NoteDetailPage() {
         versionId: result.versionId,
         content: result.content,
       })
+      // Remove blocked offline queue entry after successful Step 9 resolution,
+      // and advance any predecessor-linked follow-ups to the resolved head.
+      if (noteId) {
+        void createQueuedWriteRepository()
+          .listByNote(noteId)
+          .then(async (rows) => {
+            const repo = createQueuedWriteRepository()
+            for (const row of rows) {
+              if (row.status === 'BLOCKED_CONFLICT') {
+                await repo.advanceFollowUpBase(row.id, result.versionId)
+                await repo.remove(row.id)
+              }
+            }
+          })
+      }
       setConflictHold(null)
       queueMicrotask(() => {
         const heading = document.querySelector('.soap-editor h2')
@@ -245,6 +301,15 @@ export function NoteDetailPage() {
     },
   })
 
+  const connectivity = getConnectivityService()
+  const connectivityState = useSyncExternalStore(
+    (listener) => connectivity.subscribe(() => listener()),
+    () => connectivity.getSnapshot(),
+    () => connectivity.getSnapshot(),
+  )
+  const offlineStale =
+    Boolean(aggregate) &&
+    (connectivityState.kind === 'OFFLINE' || connectivityState.kind === 'DEGRADED')
   const actionDescriptors = useMemo(() => {
     if (!aggregate || !clinicianId) {
       return []
@@ -276,8 +341,23 @@ export function NoteDetailPage() {
     )
   }
 
-  if (detailQuery.isError) {
+  if (detailQuery.isError && !aggregate) {
     const error = detailQuery.error
+    const offlineUnavailable =
+      connectivityState.kind === 'OFFLINE' ||
+      isNetworkApiError(error) ||
+      (typeof navigator !== 'undefined' && !navigator.onLine)
+    if (offlineUnavailable) {
+      return (
+        <main className="note-detail-page" aria-labelledby="note-detail-heading">
+          <NoteDetailErrorState
+            kind="generic"
+            message="This note is unavailable offline. Connect to the network to load it."
+            backHref={backHref}
+          />
+        </main>
+      )
+    }
     if (isApiClientError(error) && error.status === 403) {
       return (
         <main className="note-detail-page" aria-labelledby="note-detail-heading">
@@ -300,11 +380,9 @@ export function NoteDetailPage() {
         </main>
       )
     }
-    const message = isNetworkApiError(error)
+    const message = isApiClientError(error)
       ? error.message
-      : isApiClientError(error)
-        ? error.message
-        : 'An unexpected error occurred while loading this note.'
+      : 'An unexpected error occurred while loading this note.'
     return (
       <main className="note-detail-page" aria-labelledby="note-detail-heading">
         <NoteDetailErrorState
@@ -358,6 +436,16 @@ export function NoteDetailPage() {
   return (
     <main className="note-detail-page" aria-labelledby="note-detail-heading">
       <NoteHeader aggregate={aggregate} backHref={backHref} />
+      {offlineStale ? (
+        <p
+          className="offline-stale-indicator"
+          role="status"
+          aria-live="polite"
+          data-testid="offline-stale-indicator"
+        >
+          Showing cached note — not refreshed from the server.
+        </p>
+      ) : null}
 
       <div className="note-detail-page__layout">
         <div className="note-detail-page__main">
@@ -392,6 +480,7 @@ export function NoteDetailPage() {
               }
               newerVersionWarning={soapEditor.newerVersionWarning}
               guardActive={autosave.guardActive}
+              locallyDurable={autosave.locallyDurable}
               frozen={inConflict}
               autosaveSlot={
                 <AutosaveStatusBanner status={autosave.status} onRetry={autosave.retry} />
@@ -416,6 +505,9 @@ export function NoteDetailPage() {
                 soapEditor.dispatch({ type: 'RESET_SECTION', section })
               }}
               onDiscardAndExit={() => {
+                if (noteId) {
+                  void createQueuedWriteRepository().removeUnsentForNote(noteId)
+                }
                 soapEditor.discardAndExit()
               }}
               onCancelClean={() => {

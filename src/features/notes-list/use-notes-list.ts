@@ -3,7 +3,7 @@ import {
   useInfiniteQuery,
   type UseInfiniteQueryResult,
 } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import type { NoteSummary } from '@/domain/models/note-summary'
 import type { NotesListFilters } from '@/features/notes-list/notes-list.types'
@@ -14,6 +14,8 @@ import {
   listNotes,
   type ListNotesResult,
 } from '@/services/api/notes-api'
+import { getConnectivityService } from '@/services/offline/connectivity'
+import { persistNoteListToOfflineCache } from '@/services/offline/offline-bootstrap'
 
 export type NotesListPage = ListNotesResult
 
@@ -62,16 +64,50 @@ export function useNotesList(filters: NotesListFilters): UseNotesListResult {
   const query = useInfiniteQuery({
     queryKey,
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) =>
-      listNotes(
-        {
-          ...filtersToListRequest(filters),
-          cursor: pageParam,
-        },
-        { signal },
-      ),
+    queryFn: async ({ pageParam, signal }) => {
+      try {
+        return await listNotes(
+          {
+            ...filtersToListRequest(filters),
+            cursor: pageParam,
+          },
+          { signal },
+        )
+      } catch (error) {
+        const offlineLike =
+          isNetworkApiError(error) || (typeof navigator !== 'undefined' && !navigator.onLine)
+        if (offlineLike) {
+          const connectivity = getConnectivityService()
+          if (typeof navigator !== 'undefined' && navigator.onLine) {
+            connectivity.markDegraded('Unable to refresh notes from the server.')
+          } else {
+            connectivity.markOffline()
+          }
+          if (pageParam === null) {
+            const { createReadCacheRepository, serializeQueryKey } =
+              await import('@/services/offline/read-cache.repository')
+            const cached = await createReadCacheRepository().getNoteList(
+              serializeQueryKey(queryKey),
+            )
+            const payload = cached?.payload as InfiniteData<NotesListPage> | undefined
+            if (payload?.pages?.[0]) {
+              return payload.pages[0]
+            }
+          }
+        }
+        throw error
+      }
+    },
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
+    networkMode: 'offlineFirst',
   })
+
+  useEffect(() => {
+    if (!query.data) {
+      return
+    }
+    void persistNoteListToOfflineCache(queryKey, query.data)
+  }, [query.data, queryKey])
 
   const rows = useMemo(() => flattenNotesPages(query.data), [query.data])
 

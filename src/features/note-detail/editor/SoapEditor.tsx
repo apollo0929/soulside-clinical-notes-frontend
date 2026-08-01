@@ -12,6 +12,11 @@ export type SoapEditorProps = {
   readonly baseRevision: number
   readonly newerVersionWarning: boolean
   readonly guardActive?: boolean
+  /**
+   * When true, IndexedDB has the pending write — skip dirty-based navigation /
+   * beforeunload blockers (banner still indicates not server-synced).
+   */
+  readonly locallyDurable?: boolean
   readonly frozen?: boolean
   readonly autosaveSlot?: ReactNode
   readonly conflictSlot?: ReactNode
@@ -28,6 +33,7 @@ export function SoapEditor({
   baseRevision,
   newerVersionWarning,
   guardActive = false,
+  locallyDurable = false,
   frozen = false,
   autosaveSlot = null,
   conflictSlot = null,
@@ -40,9 +46,9 @@ export function SoapEditor({
   const headingId = useId()
   const [discardOpen, setDiscardOpen] = useState(false)
   const dirty = state.dirtySections.size > 0
-  // Conflict navigation protection takes precedence: freeze also blocks discard dialogs.
+  // Locally durable offline queue clears data-loss navigation guards; freeze still blocks.
   const { blocker, confirmStay, confirmLeave } = useUnsavedNavigationGuard(
-    dirty || guardActive || frozen,
+    locallyDurable ? frozen : dirty || guardActive || frozen,
   )
   const focusedOnOpen = useRef(false)
   const navBlocked = blocker.state === 'blocked'

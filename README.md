@@ -75,8 +75,14 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
   auto-merge non-conflicts; explicit Keep mine / Use server / Manual merge for true conflicts (no clinical concatenation).
   - Resolve and save uses the **server head** as `baseVersionId` and a **new** `clientMutationId`.
   - A resolve that itself 409s opens a new session with the just-resolved content as the local side (no auto-retry).
-  - Ordinary editor stays frozen while resolving; offline replay is not implemented yet.
-- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts`
+  - Ordinary editor stays frozen while resolving.
+- **Offline queue & resumability (10):** Dexie IndexedDB queue + read cache; autosave falls back to local queue on
+  network/offline failures; reconnect replays per-note in order (cross-note concurrency 2) with the same
+  `clientMutationId`. Queued status is **locally durable** (not “Saved”); connectivity banner distinguishes
+  device-saved vs server-synced. Replay 409s route into the Step 9 resolver. No SSE, presence, telemetry,
+  CRDT, or PWA background sync yet. Clinical content is not stored in `localStorage` (IndexedDB only;
+  not production-HIPAA encrypted).
+- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts e2e/notes-offline.spec.ts`
 
 ## Scripts
 

@@ -28,21 +28,39 @@ export function ensureDevMockBackend(): Promise<void> {
     const { installDevActorApi } = await import('@/services/api/actor-provider')
     installDevActorApi()
 
-    const response = await fetch('/api/dev/seed', {
-      method: 'POST',
-      headers: {
-        ...getAdminActorHeaders(),
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        count: DEFAULT_SEED_CONFIG.noteCount,
-        seed: DEFAULT_DEV_SEED,
-      }),
-    })
+    try {
+      const response = await fetch('/api/dev/seed', {
+        method: 'POST',
+        headers: {
+          ...getAdminActorHeaders(),
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          count: DEFAULT_SEED_CONFIG.noteCount,
+          seed: DEFAULT_DEV_SEED,
+        }),
+      })
 
-    if (!response.ok) {
-      const text = await response.text()
-      throw new Error(`Development seed failed (${response.status}): ${text}`)
+      if (!response.ok) {
+        const text = await response.text()
+        // Offline startup may rely on IndexedDB cache without a live seed.
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return
+        }
+        throw new Error(`Development seed failed (${response.status}): ${text}`)
+      }
+    } catch (error) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return
+      }
+      // Network abort / TypeError while routes are offline-simulated.
+      if (
+        error instanceof TypeError ||
+        (error instanceof Error && /Failed to fetch|NetworkError|abort/i.test(error.message))
+      ) {
+        return
+      }
+      throw error
     }
   })()
 

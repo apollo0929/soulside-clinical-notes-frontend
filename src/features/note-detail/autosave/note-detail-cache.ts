@@ -8,6 +8,7 @@ import type { SoapContent } from '@/domain/models/soap'
 import { cloneSoapContent } from '@/domain/models/soap'
 import type { UserRole } from '@/domain/roles'
 import { notesKeys } from '@/features/notes-list/notes-query-keys'
+import { persistNoteDetailToOfflineCache } from '@/services/offline/offline-bootstrap'
 
 export type ApplySuccessfulVersionInput = {
   readonly noteId: NoteId
@@ -84,6 +85,10 @@ export function reconcileDetailCacheAfterSave(
     }
     return applySuccessfulVersionToDetail(current, input)
   })
+  const next = queryClient.getQueryData<NoteDetailAggregate>(key)
+  if (next) {
+    void persistNoteDetailToOfflineCache(input.noteId, next)
+  }
   void queryClient.invalidateQueries({
     queryKey: notesKeys.detail(input.noteId),
     refetchType: 'none',
