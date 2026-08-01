@@ -17,6 +17,7 @@ import { createMockApiError, isMockApiError, type MockApiError } from '@/mock/er
 import { FailureController } from '@/mock/failure'
 import { LatencyController } from '@/mock/latency'
 import { createMulberry32 } from '@/mock/prng'
+import { RealtimeServer } from '@/mock/realtime/realtime-server'
 import { DEFAULT_SEED_CONFIG, seedMockDatabase, type SeedResult } from '@/mock/seed/seed'
 import {
   bulkAssignReviewer,
@@ -84,6 +85,7 @@ export class MockBackendService {
   readonly latency: LatencyController
   readonly failures: FailureController
   readonly clock: MockClock
+  readonly realtime: RealtimeServer
   private readonly fixedClock: FixedMockClock | null
 
   constructor(options: MockBackendOptions = {}) {
@@ -102,6 +104,11 @@ export class MockBackendService {
       )
       this.clock = this.fixedClock
     }
+
+    this.realtime = new RealtimeServer({
+      database: this.database,
+      clock: { now: () => this.clock.now() },
+    })
 
     if (options.autoSeed !== false) {
       seedMockDatabase(this.database, {
@@ -271,8 +278,34 @@ export class MockBackendService {
     try {
       await this.latency.wait({ signal: input.signal })
       this.failures.maybeInject('notes.transition')
+      const before = this.database.getNote(input.noteId)
       const result = transitionNote(this.database, input)
-      return result.ok ? result.value : result.error
+      if (result.ok) {
+        try {
+          const after = this.database.getNote(input.noteId)
+          if (before && after && before.status !== after.status) {
+            this.realtime.emitStatusChanged({
+              note: after,
+              fromStatus: before.status,
+              toStatus: after.status,
+              actor: input.actor,
+            })
+          }
+          if (result.value.newVersion && after) {
+            this.realtime.emitVersionCreated({
+              note: after,
+              version: result.value.newVersion,
+              actor: input.actor,
+              originatingClientMutationId: null,
+              wasIdempotentReplay: false,
+            })
+          }
+        } catch {
+          // Realtime fan-out must never fail the REST write path.
+        }
+        return result.value
+      }
+      return result.error
     } catch (error) {
       return toMockError(error)
     }
@@ -284,6 +317,8 @@ export class MockBackendService {
     try {
       await this.latency.wait({ signal: input.signal })
       this.failures.maybeInject('notes.createVersion')
+      const priorCompleted = this.database.getCompletedMutation(input.clientMutationId)
+      const wasIdempotentReplay = priorCompleted?.operation === 'CREATE_NOTE_VERSION'
       const result = createNoteVersion(this.database, {
         actor: input.actor,
         noteId: input.noteId,
@@ -292,7 +327,27 @@ export class MockBackendService {
         clientMutationId: input.clientMutationId,
         occurredAt: input.occurredAt,
       })
-      return result.ok ? result.response : result.error
+      if (!result.ok) {
+        return result.error
+      }
+      if (!wasIdempotentReplay) {
+        try {
+          const note = this.database.getNote(input.noteId)
+          const version = this.database.getVersion(result.response.version.id)
+          if (note && version) {
+            this.realtime.emitVersionCreated({
+              note,
+              version,
+              actor: input.actor,
+              originatingClientMutationId: input.clientMutationId,
+              wasIdempotentReplay: false,
+            })
+          }
+        } catch {
+          // Realtime fan-out must never fail the REST write path.
+        }
+      }
+      return result.response
     } catch (error) {
       return toMockError(error)
     }
@@ -304,6 +359,8 @@ export class MockBackendService {
     try {
       await this.latency.wait({ signal: input.signal })
       this.failures.maybeInject('notes.bulkAssign')
+      const priorCompleted = this.database.getCompletedMutation(input.clientMutationId)
+      const wasIdempotentReplay = priorCompleted?.operation === 'BULK_ASSIGN_REVIEWER'
       const result = bulkAssignReviewer(this.database, {
         actor: input.actor,
         noteIds: input.noteIds,
@@ -311,7 +368,25 @@ export class MockBackendService {
         clientMutationId: input.clientMutationId,
         occurredAt: input.occurredAt,
       })
-      return result.ok ? result.response : result.error
+      if (!result.ok) {
+        return result.error
+      }
+      if (!wasIdempotentReplay) {
+        try {
+          for (const item of result.response.results) {
+            if (!item.success) {
+              continue
+            }
+            const note = this.database.getNote(item.noteId)
+            if (note) {
+              this.realtime.emitReviewerChanged({ note, actor: input.actor })
+            }
+          }
+        } catch {
+          // Realtime fan-out must never fail the REST write path.
+        }
+      }
+      return result.response
     } catch (error) {
       return toMockError(error)
     }
@@ -323,13 +398,43 @@ export class MockBackendService {
     try {
       await this.latency.wait({ signal: input.signal })
       this.failures.maybeInject('notes.bulkRegenerate')
+      const priorCompleted = this.database.getCompletedMutation(input.clientMutationId)
+      const wasIdempotentReplay = priorCompleted?.operation === 'BULK_REGENERATE'
+      // Capture statuses before mutate for emission when regenerating via nested transition.
+      const beforeById = new Map(
+        input.noteIds.map((noteId) => [noteId, this.database.getNote(noteId)?.status] as const),
+      )
       const result = bulkRegenerateNotes(this.database, {
         actor: input.actor,
         noteIds: input.noteIds,
         clientMutationId: input.clientMutationId,
         occurredAt: input.occurredAt,
       })
-      return result.ok ? result.response : result.error
+      if (!result.ok) {
+        return result.error
+      }
+      if (!wasIdempotentReplay) {
+        try {
+          for (const item of result.response.results) {
+            if (!item.success) {
+              continue
+            }
+            const note = this.database.getNote(item.noteId)
+            const fromStatus = beforeById.get(item.noteId)
+            if (note && fromStatus && fromStatus !== note.status) {
+              this.realtime.emitStatusChanged({
+                note,
+                fromStatus,
+                toStatus: note.status,
+                actor: input.actor,
+              })
+            }
+          }
+        } catch {
+          // Realtime fan-out must never fail the REST write path.
+        }
+      }
+      return result.response
     } catch (error) {
       return toMockError(error)
     }

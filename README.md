@@ -79,10 +79,15 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
 - **Offline queue & resumability (10):** Dexie IndexedDB queue + read cache; autosave falls back to local queue on
   network/offline failures; reconnect replays per-note in order (cross-note concurrency 2) with the same
   `clientMutationId`. Queued status is **locally durable** (not “Saved”); connectivity banner distinguishes
-  device-saved vs server-synced. Replay 409s route into the Step 9 resolver. No SSE, presence, telemetry,
-  CRDT, or PWA background sync yet. Clinical content is not stored in `localStorage` (IndexedDB only;
-  not production-HIPAA encrypted).
-- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts e2e/notes-offline.spec.ts`
+  device-saved vs server-synced. Replay 409s route into the Step 9 resolver. Clinical content is not stored in
+  `localStorage` (IndexedDB only; not production-HIPAA encrypted).
+- **Realtime & presence (11):** mock SSE transport (`/api/realtime/stream`) with one app-scoped coordinator;
+  monotonic `sequence` + `eventId` dedupe; missed-event replay from `lastEventId` (log retains 500); `RESYNC_REQUIRED`
+  when the cursor was evicted. List/detail caches reconcile without broadcasting SOAP content. Dirty editors keep
+  drafts and surface newer-version/conflict warnings; self-events correlate via `originatingClientMutationId`.
+  Presence is informational (30s lease / 10s heartbeat), not an edit lock. Mock limitation: separate Playwright
+  browser contexts do not share one MSW backend — use same-context tabs or the DEV `__SOULSIDE_REALTIME__` hook.
+- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts e2e/notes-offline.spec.ts e2e/notes-realtime.spec.ts`
 
 ## Scripts
 

@@ -19,7 +19,9 @@ describe('ConnectivityBanner', () => {
     expect(screen.getByTestId('connectivity-banner')).toBeInTheDocument()
     expect(screen.getByText(/Offline — changes will be saved on this device/i)).toBeInTheDocument()
     expect(screen.getByTestId('connectivity-queue-count')).toHaveTextContent('Queue: 2')
-    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(
+      screen.getByTestId('connectivity-banner').querySelector('[aria-live="polite"]'),
+    ).toBeTruthy()
 
     service.setQueueSummary({ queued: 2, conflicts: 0, failed: 1 })
     rerender(<ConnectivityBanner connectivity={service} />)

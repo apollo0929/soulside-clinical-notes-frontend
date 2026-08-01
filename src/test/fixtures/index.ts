@@ -17,6 +17,7 @@ export {
   buildNoteListItemDto,
   buildNotesListResponseDto,
   buildPresenceRealtimeEventDto,
+  buildResyncRequiredRealtimeEventDto,
   buildStatusChangedRealtimeEventDto,
   buildVersionAddedRealtimeEventDto,
   buildVersionConflictResponseDto,

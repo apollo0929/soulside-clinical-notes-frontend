@@ -1,4 +1,5 @@
 import { createMockBackendBrowserWorker } from '@/mock/msw/browser'
+import { registerActiveMockRealtimeServer } from '@/mock/realtime/active-server'
 import { DEFAULT_SEED_CONFIG } from '@/mock/seed/seed'
 import { MockBackendService } from '@/mock/services/backend'
 import { DEFAULT_DEV_SEED, getAdminActorHeaders } from '@/services/api/actor-provider'
@@ -19,6 +20,7 @@ export function ensureDevMockBackend(): Promise<void> {
   bootstrapPromise = (async () => {
     const backend = new MockBackendService({ autoSeed: false })
     backend.configureForTests()
+    registerActiveMockRealtimeServer(backend.realtime)
     const { worker } = createMockBackendBrowserWorker(backend)
     await worker.start({
       onUnhandledRequest: 'bypass',
@@ -27,6 +29,11 @@ export function ensureDevMockBackend(): Promise<void> {
 
     const { installDevActorApi } = await import('@/services/api/actor-provider')
     installDevActorApi()
+
+    const { installDevRealtimeApi, registerRealtimeDevDatabase } =
+      await import('@/services/realtime/dev-realtime-api')
+    registerRealtimeDevDatabase(backend.database)
+    installDevRealtimeApi()
 
     try {
       const response = await fetch('/api/dev/seed', {

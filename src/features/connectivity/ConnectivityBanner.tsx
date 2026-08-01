@@ -4,8 +4,13 @@ import { type ConnectivityService, getConnectivityService } from '@/services/off
 import type { ConnectivityState } from '@/services/offline/offline.types'
 import { getActiveReplayCoordinator } from '@/services/offline/offline-bootstrap'
 import { createQueuedWriteRepository } from '@/services/offline/queued-write.repository'
+import {
+  getActiveRealtimeCoordinator,
+  subscribeRealtimeCoordinatorReady,
+} from '@/services/realtime/realtime-bootstrap'
+import type { RealtimeConnectionState } from '@/services/realtime/realtime-events'
 
-function bannerMessage(
+function offlineBannerMessage(
   state: ConnectivityState,
   summary: { queued: number; conflicts: number; failed: number },
 ): string {
@@ -36,10 +41,32 @@ function bannerMessage(
   }
 }
 
+function realtimeBannerMessage(state: RealtimeConnectionState): string | null {
+  switch (state) {
+    case 'CONNECTED':
+      return 'Live updates connected'
+    case 'CONNECTING':
+      return 'Connecting live updates…'
+    case 'RECONNECTING':
+      return 'Reconnecting live updates…'
+    case 'RESYNCING':
+      return 'Resynchronizing…'
+    case 'DEGRADED':
+      return 'Live updates unavailable; data may be stale'
+    case 'DISCONNECTED':
+      return null
+    default: {
+      const _exhaustive: never = state
+      return _exhaustive
+    }
+  }
+}
+
 function shouldShowBanner(
   state: ConnectivityState,
   summary: { queued: number; conflicts: number; failed: number },
   syncedFlash: boolean,
+  realtimeState: RealtimeConnectionState | null,
 ): boolean {
   if (syncedFlash) {
     return true
@@ -47,7 +74,18 @@ function shouldShowBanner(
   if (summary.conflicts > 0 || summary.failed > 0 || summary.queued > 0) {
     return true
   }
-  return state.kind !== 'ONLINE'
+  if (state.kind !== 'ONLINE') {
+    return true
+  }
+  if (
+    realtimeState === 'RECONNECTING' ||
+    realtimeState === 'RESYNCING' ||
+    realtimeState === 'DEGRADED' ||
+    realtimeState === 'CONNECTING'
+  ) {
+    return true
+  }
+  return false
 }
 
 export type ConnectivityBannerProps = {
@@ -72,6 +110,29 @@ export function ConnectivityBanner({ connectivity }: ConnectivityBannerProps) {
     () => service.getQueueSummary(),
   )
 
+  const realtimeState = useSyncExternalStore(
+    (listener) => {
+      let unsubCoordinator: (() => void) | null = null
+      const bind = () => {
+        unsubCoordinator?.()
+        unsubCoordinator = null
+        const coordinator = getActiveRealtimeCoordinator()
+        if (coordinator) {
+          unsubCoordinator = coordinator.subscribeConnectionState(() => listener())
+        }
+        listener()
+      }
+      bind()
+      const unsubReady = subscribeRealtimeCoordinatorReady(bind)
+      return () => {
+        unsubReady()
+        unsubCoordinator?.()
+      }
+    },
+    () => getActiveRealtimeCoordinator()?.getConnectionState() ?? null,
+    () => null,
+  )
+
   useEffect(() => {
     if (
       previousKind.current === 'REPLAYING' &&
@@ -93,14 +154,43 @@ export function ConnectivityBanner({ connectivity }: ConnectivityBannerProps) {
     return () => globalThis.clearTimeout(timer)
   }, [syncedFlash])
 
-  if (!shouldShowBanner(state, summary, syncedFlash)) {
+  if (!shouldShowBanner(state, summary, syncedFlash, realtimeState)) {
     return null
   }
 
-  const message =
+  const offlineMessage =
     syncedFlash && state.kind === 'ONLINE'
       ? 'All queued changes synchronized.'
-      : bannerMessage(state, summary)
+      : offlineBannerMessage(state, summary)
+
+  const liveMessage =
+    state.kind === 'ONLINE' &&
+    summary.queued === 0 &&
+    summary.failed === 0 &&
+    summary.conflicts === 0
+      ? realtimeState
+        ? realtimeBannerMessage(realtimeState)
+        : null
+      : null
+
+  const message =
+    liveMessage && (state.kind === 'ONLINE' || syncedFlash)
+      ? summary.queued > 0 || summary.failed > 0 || summary.conflicts > 0 || state.kind !== 'ONLINE'
+        ? offlineMessage
+        : liveMessage
+      : offlineMessage
+
+  const realtimeText = realtimeState ? realtimeBannerMessage(realtimeState) : null
+  // Avoid a second polite live region when the primary status already announces the same text.
+  const announceRealtime =
+    realtimeText && realtimeText !== message
+      ? realtimeState === 'RECONNECTING' ||
+        realtimeState === 'RESYNCING' ||
+        realtimeState === 'DEGRADED' ||
+        realtimeState === 'CONNECTED'
+        ? realtimeText
+        : null
+      : null
 
   return (
     <section
@@ -114,6 +204,16 @@ export function ConnectivityBanner({ connectivity }: ConnectivityBannerProps) {
       <p className="connectivity-banner__message" role="status" aria-live="polite">
         {message}
       </p>
+      {announceRealtime ? (
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {announceRealtime}
+        </p>
+      ) : null}
+      {realtimeText ? (
+        <p className="connectivity-banner__realtime" data-testid="realtime-status">
+          {realtimeText}
+        </p>
+      ) : null}
       {summary.queued > 0 ? (
         <p className="connectivity-banner__count" data-testid="connectivity-queue-count">
           Queue: {summary.queued}

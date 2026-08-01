@@ -15,7 +15,7 @@ state can change without copying clinical blobs into every projection.
 forms a DAG when amendments branch from an approved ancestor. Mutating past versions is
 not part of the model.
 
-Identifiers are branded strings (`NoteId`, `VersionId`, …) constructed only through Zod
+Identifiers are branded strings (`NoteId`, `VersionId`, ?) constructed only through Zod
 parsers / `parse*` helpers. Branding prevents accidentally mixing a patient id with a note
 id at compile time without runtime wrapper objects.
 
@@ -189,14 +189,14 @@ accessible fallback beside automatic near-end fetching.
 **Debounced search:** The search input updates immediately; the URL/`q` query updates after
 ~400 ms. Clearing search applies immediately. Debounce timers cancel on unmount.
 
-**Empty vs no-results:** With no filters and zero notes → “No notes are available.” With
-active filters/search and zero matches → “No notes match…” plus Clear filters. Errors show
-a typed message and Retry — never a misleading empty state.
+**Empty vs no-results:** With no filters and zero notes ? ?No notes are available.? With
+active filters/search and zero matches ? ?No notes match?? plus Clear filters. Errors show
+a typed message and Retry ? never a misleading empty state.
 
 **Server-side sorting:** The UI does not re-sort flattened pages. The mock backend applies
 the requested sort plus note id as a stable secondary key.
 
-**Memory bound:** Only loaded cursor pages stay in memory/DOM — not the full 100k corpus.
+**Memory bound:** Only loaded cursor pages stay in memory/DOM ? not the full 100k corpus.
 
 **Deferred after Step 6B:** note detail, SOAP editor, autosave, conflict UI,
 IndexedDB/offline, realtime, presence, telemetry, and authentication UI.
@@ -206,7 +206,7 @@ IndexedDB/offline, realtime, presence, telemetry, and authentication UI.
 Selection is **page-local React reducer state** (`selectedIds: ReadonlySet<NoteId>`).
 It is not stored in the URL, TanStack Query cache, mock backend, or Zustand.
 
-**Visible selection:** “Select all” applies only to currently loaded filtered rows,
+**Visible selection:** ?Select all? applies only to currently loaded filtered rows,
 not the full backend corpus. Newly loaded cursor pages are not auto-selected.
 The header checkbox uses native `indeterminate` when the visible set is partially
 selected.
@@ -217,7 +217,7 @@ currently loaded rows. Sorting alone preserves selection when the same IDs remai
 Selection is not cleared during the loading gap to avoid flicker.
 
 **Partial-success batch model:** Each note mutation is atomic. The overall batch
-supports partial success — one note failure does not roll back other successful
+supports partial success ? one note failure does not roll back other successful
 notes. Idempotency stores the final entire batch response after all item operations
 complete. The in-memory mock does **not** implement global multi-note rollback if
 completed-response storage fails; under normal operation that write succeeds.
@@ -233,13 +233,13 @@ completed-response storage fails; under normal operation that write succeeds.
 
 Request-wide permission: `NOTE_BULK_ASSIGN_REVIEWER` (ADMIN). Per-note also checks
 `NOTE_ASSIGN_REVIEWER`. Assigning a reviewer does **not** transition
-`READY_FOR_REVIEW` → `IN_REVIEW`. No `ReviewEvent` is appended for assignment
+`READY_FOR_REVIEW` ? `IN_REVIEW`. No `ReviewEvent` is appended for assignment
 because status does not change; a richer audit-action model would be added in
 production.
 
 **Regeneration:** Request-wide `NOTE_BULK_REGENERATE` (ADMIN). Each item calls the
 existing `transitionNote` service with `REGENERATE` / `USER`. Successful
-`FAILED → GENERATING` appends one `ReviewEvent`. Non-FAILED notes fail per-item.
+`FAILED ? GENERATING` appends one `ReviewEvent`. Non-FAILED notes fail per-item.
 
 **Idempotency:** `clientMutationId` with operation-specific fingerprints
 (`BULK_ASSIGN_REVIEWER`, `BULK_REGENERATE`). Note IDs are sorted before
@@ -301,7 +301,7 @@ does not use `dangerouslySetInnerHTML`.
 
 **Lifecycle-derived action presentation:** User actions are evaluated via
 `evaluateNoteTransition` + `authorize` + `combineAuthorizationAndLifecycle`. Results are
-shown as a read-only availability summary — no clickable mutation controls in 7A.
+shown as a read-only availability summary ? no clickable mutation controls in 7A.
 `approvedAt` is derived from the latest ReviewEvent with `toStatus === APPROVED`.
 `occurredAt` is injected through `getUiOccurredAt` (not inside pure evaluation).
 
@@ -426,7 +426,7 @@ three-way resolver (below).
 **Query-cache reconciliation:** On success, pure helpers update the note-detail cache
 (current version, content from the saved command, revision / parent from the response, actor
 for authorship). Success DTO has no timestamp, so prior `updatedAt` / `createdAt` are retained
-and detail is soft-invalidated for a later authoritative refresh — timestamps are not
+and detail is soft-invalidated for a later authoritative refresh ? timestamps are not
 fabricated. Version history appends the new ref once (idempotent on replay). List queries are
 invalidated without wiping visible rows.
 
@@ -482,7 +482,7 @@ must use a **new** `clientMutationId`.
 record share one preflight-then-apply database commit (`commitCreateVersion`).
 
 **Revision allocation:** `max(revisions for note) + 1`. Version IDs use a database-scoped
-counter (`ver_generated_000001`, …) reset with the database.
+counter (`ver_generated_000001`, ?) reset with the database.
 
 **Common ancestor:** walk parent links from A to root, then walk B until an A ancestor is
 found (single-parent lineages). Cycles / missing parents / cross-note versions are
@@ -525,10 +525,10 @@ sequenceDiagram
 
 ## Three-Way Conflict Resolution
 
-Step 9 resolves `VERSION_CONFLICT` without discarding the clinician’s local draft. Dependency
+Step 9 resolves `VERSION_CONFLICT` without discarding the clinician?s local draft. Dependency
 direction stays:
 
-`Conflict UI → pure three-way merge model → selected version queries → create-version API → mock backend`
+`Conflict UI ? pure three-way merge model ? selected version queries ? create-version API ? mock backend`
 
 Merge semantics live in pure helpers (`classifySectionConflict`, session builder, resolution
 reducer, selectors). React components do not invent clinical merge rules.
@@ -542,16 +542,16 @@ detail refetch.
 
 **Section classification** (exact string equality; whitespace significant; no trim):
 
-1. local === ancestor && server === ancestor → `UNCHANGED`
-2. local !== ancestor && server === ancestor → `LOCAL_ONLY`
-3. local === ancestor && server !== ancestor → `SERVER_ONLY`
-4. local === server && local !== ancestor → `SAME_CHANGE`
-5. otherwise divergent → `CONFLICT`
+1. local === ancestor && server === ancestor ? `UNCHANGED`
+2. local !== ancestor && server === ancestor ? `LOCAL_ONLY`
+3. local === ancestor && server !== ancestor ? `SERVER_ONLY`
+4. local === server && local !== ancestor ? `SAME_CHANGE`
+5. otherwise divergent ? `CONFLICT`
 
 **Automatic vs explicit:** Non-conflicting sections resolve automatically
-(`UNCHANGED`/`SAME_CHANGE` → shared value; `LOCAL_ONLY` → local; `SERVER_ONLY` → server).
+(`UNCHANGED`/`SAME_CHANGE` ? shared value; `LOCAL_ONLY` ? local; `SERVER_ONLY` ? server).
 True `CONFLICT` sections require Keep mine, Use server, or Manual merge (manual initializes
-from local text). Clinical strings are **never** concatenated or semantically merged — the
+from local text). Clinical strings are **never** concatenated or semantically merged ? the
 product must not invent clinical meaning.
 
 **Editing policy:** While the resolver is open the ordinary SOAP editor is frozen (read-only).
@@ -575,7 +575,7 @@ over the ordinary discard dialog (only one confirmation surface). Leaving silent
 allowed.
 
 **Still deferred:** SSE / WebSocket missed-event replay, presence, telemetry, CRDT, and PWA
-background sync remain out of scope for Step 9–10 online conflict resolution. Offline queue
+background sync remain out of scope for Step 9?10 online conflict resolution. Offline queue
 and resumable replay are covered in **Offline Queue and Resumability** below.
 
 ```mermaid
@@ -601,7 +601,7 @@ sequenceDiagram
 
 Step 10 adds durable offline writes and resumable replay. Dependency direction:
 
-`Editor/autosave → OfflineWriteQueue abstraction → Dexie → ReplayCoordinator → create-version API → conflict resolver`
+`Editor/autosave ? OfflineWriteQueue abstraction ? Dexie ? ReplayCoordinator ? create-version API ? conflict resolver`
 
 React components never touch Dexie tables directly.
 
@@ -616,7 +616,7 @@ Database name: `soulside-offline-v1` (tests use deterministic unique names).
 | `cachedNoteLists`   | `queryKey` | Canonical list query pages                 |
 | `replayMetadata`    | `id`       | Replay bookkeeping                         |
 
-Migrations: bump Dexie `version()` and use `.upgrade()` — do not mutate v1 stores in place.
+Migrations: bump Dexie `version()` and use `.upgrade()` ? do not mutate v1 stores in place.
 Only v1 exists today.
 
 Queue entry fields include `fingerprint`, `predecessorQueueId`, and optional `conflictPayload`.
@@ -624,14 +624,14 @@ Content is defensively cloned on write/read. No `Response` objects or functions 
 
 ### Queue identity and coalescing
 
-- **Queue entry `id`**: local storage identity (`qw_…`)
-- **`clientMutationId`**: server idempotency identity — **never regenerated on replay**
+- **Queue entry `id`**: local storage identity (`qw_?`)
+- **`clientMutationId`**: server idempotency identity ? **never regenerated on replay**
 
 **Coalescing policy (safer recommended rule):**
 
 1. At most one unsent `QUEUED` entry per note (no predecessor).
-2. Changed content → **new** `clientMutationId`; prior unsent entry removed atomically.
-3. Same fingerprint as the existing unsent entry → keep existing entry (reload-safe; preserves mutation id).
+2. Changed content ? **new** `clientMutationId`; prior unsent entry removed atomically.
+3. Same fingerprint as the existing unsent entry ? keep existing entry (reload-safe; preserves mutation id).
 4. While `REPLAYING`, at most one follow-up `QUEUED` linked via `predecessorQueueId`.
 5. Do not create an unbounded entry per keystroke.
 
@@ -640,18 +640,18 @@ Content is defensively cloned on write/read. No `Response` objects or functions 
 - Same-note writes never run concurrently; order is `createdAt`.
 - Cross-note concurrency limit: **2**.
 - On success, follow-up `baseVersionId` advances to the returned version via predecessor linkage.
-- One note’s failure / conflict does not block other notes.
+- One note?s failure / conflict does not block other notes.
 - Replay uses an injectable scheduler so unit tests never sleep real multi-second backoff.
 
 ### Retry / backoff
 
-Transient network / 5xx: exponential backoff `1s → 2s → 4s → …` capped at `30s`, max 6 attempts
+Transient network / 5xx: exponential backoff `1s ? 2s ? 4s ? ?` capped at `30s`, max 6 attempts
 per cycle, then `FAILED` (entry retained; manual Retry). `403` / `400` do not retry.
 `clientMutationId` is preserved across retries.
 
 ### Conflict routing
 
-On 409 during replay: mark `BLOCKED_CONFLICT`, stop that note’s replay, keep the entry,
+On 409 during replay: mark `BLOCKED_CONFLICT`, stop that note?s replay, keep the entry,
 expose the existing Step 9 resolver with queued local content + stored conflict payload.
 Resolution success removes the blocked entry, advances any predecessor-linked follow-ups
 to the resolved head version, and uses a **new** mutation id for the resolved write (Step 9 rules).
@@ -669,7 +669,7 @@ policy in production. This take-home does **not** claim HIPAA compliance.
 ### Locally durable vs server-saved
 
 Once a write is confirmed in IndexedDB it is reload-safe (**locally durable**). Status shows
-“Saved on this device — waiting to sync…”, **not** “Saved”. Internal navigation /
+?Saved on this device ? waiting to sync??, **not** ?Saved?. Internal navigation /
 `beforeunload` data-loss blockers clear only when the latest draft is already flushed to the
 queue (`QUEUED_OFFLINE` / `REPLAYING` / `SYNC_FAILED` and not dirty). While durable, further
 edits use zero debounce so coalesces reach IndexedDB quickly. The connectivity banner still
@@ -683,8 +683,8 @@ not from a separate editor-state persistence layer.
 
 ### Startup restore
 
-Idempotent `ensureOfflineBootstrap`: open IndexedDB → hydrate query cache → start connectivity
-→ start replay when not offline. Safe under React Strict Mode. Offline startup tolerates
+Idempotent `ensureOfflineBootstrap`: open IndexedDB ? hydrate query cache ? start connectivity
+? start replay when not offline. Safe under React Strict Mode. Offline startup tolerates
 missing backend seed when cache exists.
 
 ```mermaid
@@ -708,5 +708,114 @@ sequenceDiagram
     S-->>R: 409
     R->>Q: Mark BLOCKED_CONFLICT
     R-->>E: Open existing resolver
+  end
+```
+
+## Real-Time Reconciliation and Presence
+
+Step 11 adds live cache reconciliation and informational presence over a mock SSE
+transport. Dependency direction:
+
+`Mock realtime server ? RealtimeTransport ? RealtimeCoordinator ? pure reconciliation helpers ? TanStack Query ? editor/autosave/conflict`
+
+React components never parse EventSource messages directly. The mock database is never
+imported into feature UI modules.
+
+### Transport choice
+
+**SSE** is the browser default. Client writes continue through existing REST APIs; the
+client only receives note/presence events. `RealtimeTransport` keeps SSE replaceable.
+Vitest/jsdom (no EventSource) uses an in-process transport against the registered
+`RealtimeServer`.
+
+EventSource cannot set headers; actor identity is passed as `x-user-id` /
+`x-user-role` query parameters on `/api/realtime/stream`.
+
+### One application connection
+
+`ensureRealtimeBootstrap` opens a single coordinator connection (Strict Mode safe).
+Intentional OFFLINE closes the transport; ONLINE / RECONNECTING / DEGRADED reconnect
+with backoff `1s ? 2s ? 4s ? 8s ? 30s` (injectable scheduler).
+
+### Event contract
+
+Discriminated Zod union on `eventType`:
+
+- NOTE_CREATED / NOTE_UPDATED / NOTE_VERSION_CREATED / NOTE_STATUS_CHANGED /
+  NOTE_REVIEWER_CHANGED / NOTE_DELETED
+- PRESENCE_JOINED / PRESENCE_UPDATED / PRESENCE_LEFT / PRESENCE_SNAPSHOT
+- RESYNC_REQUIRED
+
+Every event includes `eventId`, `sequence`, `occurredAt`. Version events carry
+metadata (and optional list-safe summary) but **not** SOAP clinical content. Detail
+content is refetched when safe.
+
+Malformed events are ignored (cursor not advanced) and reported via
+`reportMalformedRealtimeEvent` (non-clinical debug only).
+
+### Ordering and deduplication
+
+Coordinator tracks `lastAppliedSequence`, `lastEventId`, and a bounded recent
+event-ID set (256). Duplicate event IDs apply once. Older sequences are ignored.
+Actor-filtered delivery can create sequence holes; those are **not** treated as loss.
+True loss is signaled by server `RESYNC_REQUIRED` (evicted cursor), which invalidates
+queries. `lastEventId` is also persisted in `sessionStorage` for reconnect after reload.
+
+### Missed-event replay
+
+Mock `RealtimeEventLog` retains the last **500** events. On connect, the client sends
+`lastEventId`; the server replays later events in order, then live delivery. If the
+cursor was evicted, the server emits `RESYNC_REQUIRED` and the client invalidates
+queries for a fresh snapshot.
+
+### Self-event correlation
+
+`NOTE_VERSION_CREATED.originatingClientMutationId` correlates with a bounded TTL store
+populated on local autosave success (`registerLocalMutation`). Matching events
+reconcile idempotently without false newer-version warnings. Actor ID alone is
+insufficient (multi-tab).
+
+### Cache reconciliation
+
+Pure helpers patch list summaries immutably (cursor pages preserved). Status/reviewer
+membership changes invalidate list queries without clearing loaded pages. Detail
+metadata updates immutably; version history entries dedupe by version id; stale
+revisions are ignored.
+
+### Editor / conflict behavior
+
+Reuses Step 7B?9 policies: clean editor reinitializes to the new head; dirty editor
+preserves draft and shows the newer-version warning / conflict path. Conflict resolver
+sessions stay open; a newer head uses repeated-conflict rebinding before the next
+resolve save.
+
+### Presence
+
+Informational only (not a lock). Session id distinguishes tabs. Lease **30s**,
+heartbeat **10s**. Own session is excluded from ?other users?. UI copy:
+?No other viewers? / ?Alex is viewing? / ?Alex is editing? / ?N other people are viewing?.
+
+### Offline connectivity integration
+
+Realtime disconnects on intentional offline and does not start duplicate offline write
+replay. Write replay (Step 10) and realtime reconnect remain separate coordinators.
+
+```mermaid
+sequenceDiagram
+  participant A as Client A
+  participant S as Realtime server
+  participant B as Client B
+  participant Q as Query cache
+  participant E as Editor
+
+  B->>S: REST save commits
+  S-->>A: NOTE_VERSION_CREATED
+  A->>A: Validate + sequence check
+  alt editor clean
+    A->>Q: Reconcile/refetch head
+    Q->>E: Reinitialize clean editor
+  else editor dirty
+    A->>E: Preserve draft
+    A->>E: Show newer-version/conflict state
   end
 ```

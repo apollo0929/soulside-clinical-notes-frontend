@@ -124,6 +124,12 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
       authorId: parseUserId(actor.userId),
       authorRole: actor.role,
     })
+    void import('@/services/realtime').then(({ registerLocalMutation }) => {
+      registerLocalMutation({
+        mutationId: event.intent.clientMutationId,
+        versionId: event.versionId,
+      })
+    })
   })
 
   useEffect(() => {
@@ -150,6 +156,8 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
       store.coordinator = createAutosaveCoordinator({
         transport: {
           async save(intent, signal) {
+            const { registerLocalMutation } = await import('@/services/realtime')
+            registerLocalMutation({ mutationId: intent.clientMutationId })
             const result = await createNoteVersion(
               {
                 noteId: intent.noteId,
@@ -159,6 +167,10 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
               },
               { signal },
             )
+            registerLocalMutation({
+              mutationId: intent.clientMutationId,
+              versionId: result.version.id,
+            })
             return {
               versionId: result.version.id,
               revision: result.version.revision,

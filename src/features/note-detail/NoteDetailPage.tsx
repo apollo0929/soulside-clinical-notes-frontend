@@ -50,6 +50,7 @@ import {
   versionComparisonReducer,
 } from '@/features/note-detail/version-comparison-reducer'
 import { VersionHistory } from '@/features/note-detail/VersionHistory'
+import { NotePresence } from '@/features/presence/NotePresence'
 import { getActorIdentity } from '@/services/api/actor-provider'
 import { isApiClientError, isNetworkApiError } from '@/services/api/api-errors'
 import { getConnectivityService } from '@/services/offline/connectivity'
@@ -436,6 +437,9 @@ export function NoteDetailPage() {
   return (
     <main className="note-detail-page" aria-labelledby="note-detail-heading">
       <NoteHeader aggregate={aggregate} backHref={backHref} />
+      {noteId ? (
+        <NotePresence noteId={noteId} activity={soapEditor.isEditing ? 'EDITING' : 'VIEWING'} />
+      ) : null}
       {offlineStale ? (
         <p
           className="offline-stale-indicator"

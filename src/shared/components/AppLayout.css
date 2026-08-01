@@ -77,6 +77,33 @@
   margin-left: auto;
 }
 
+.connectivity-banner__realtime {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.note-presence {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e5e5e0;
+}
+
+.note-presence__summary {
+  margin: 0;
+  font-weight: 600;
+}
+
+.note-presence__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #5c5c56;
+}
+
+.note-presence__list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

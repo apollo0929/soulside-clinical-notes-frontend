@@ -90,6 +90,21 @@ test('notes detail three-way conflict resolution flow', async ({ page }) => {
   const baseRevision = detail.currentVersion.revision
   const sections = detail.currentVersion.content.sections
 
+  const subjective = page.getByRole('textbox', { name: 'Subjective' })
+  const objective = page.getByRole('textbox', { name: 'Objective' })
+  const assessment = page.getByRole('textbox', { name: 'Assessment' })
+  const plan = page.getByRole('textbox', { name: 'Plan' })
+
+  const localS = `${sections.S} local-S`
+  const localO = `${sections.O} local-O`
+  const localA = `${sections.A} local-A`
+
+  // Dirty the editor before the concurrent write so realtime preserves the draft
+  // (clean editors reinitialize to the new head and would not conflict).
+  await subjective.fill(localS)
+  await objective.fill(localO)
+  await assessment.fill(localA)
+
   const concurrentBody = await page.evaluate(
     async ({ id, baseVersionId, sections: soap }) => {
       const response = await fetch(`/api/notes/${id}/versions`, {
@@ -120,18 +135,6 @@ test('notes detail three-way conflict resolution flow', async ({ page }) => {
     { id: noteId!, baseVersionId: baseId, sections },
   )
   const serverHeadRevision = concurrentBody.version.revision
-
-  const subjective = page.getByRole('textbox', { name: 'Subjective' })
-  const objective = page.getByRole('textbox', { name: 'Objective' })
-  const assessment = page.getByRole('textbox', { name: 'Assessment' })
-  const plan = page.getByRole('textbox', { name: 'Plan' })
-
-  const localS = `${sections.S} local-S`
-  const localO = `${sections.O} local-O`
-  const localA = `${sections.A} local-A`
-  await subjective.fill(localS)
-  await objective.fill(localO)
-  await assessment.fill(localA)
 
   const conflictHeading = page.getByRole('heading', {
     name: /Version conflict — resolve before continuing/i,

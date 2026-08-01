@@ -5,6 +5,7 @@ import {
   parsePatientId,
   parseRealtimeEventId,
   parseReviewEventId,
+  parseSessionId,
   parseUserId,
   parseVersionId,
 } from '@/domain/ids'
@@ -317,9 +318,17 @@ export function buildVersionConflictResponseDto(
   })
 }
 
-export function buildStatusChangedRealtimeEventDto(): RealtimeEventDto {
+export function buildStatusChangedRealtimeEventDto(
+  overrides: Partial<{
+    sequence: number
+    occurredAt: RealtimeEventDto['occurredAt']
+  }> = {},
+): RealtimeEventDto {
   return realtimeEventDtoSchema.parse({
-    type: 'note.status_changed',
+    eventType: 'NOTE_STATUS_CHANGED',
+    eventId: parseRealtimeEventId('evt_rt_1'),
+    sequence: overrides.sequence ?? 1,
+    occurredAt: overrides.occurredAt ?? UPDATED_AT,
     noteId: parseNoteId('note_123'),
     fromStatus: 'READY_FOR_REVIEW',
     toStatus: 'IN_REVIEW',
@@ -327,33 +336,85 @@ export function buildStatusChangedRealtimeEventDto(): RealtimeEventDto {
       id: parseUserId('usr_123'),
       displayName: 'Dr. Chen',
     },
-    at: UPDATED_AT,
-    eventId: parseRealtimeEventId('evt_rt_1'),
+    summary: {
+      id: parseNoteId('note_123'),
+      status: 'IN_REVIEW',
+      currentVersionId: parseVersionId('ver_123'),
+      currentRevision: 3,
+      assignedReviewer: {
+        id: parseUserId('usr_123'),
+        displayName: 'Dr. Chen',
+        role: 'REVIEWER',
+      },
+      updatedAt: UPDATED_AT,
+    },
   })
 }
 
-export function buildVersionAddedRealtimeEventDto(): RealtimeEventDto {
+export function buildVersionAddedRealtimeEventDto(
+  overrides: Partial<{
+    sequence: number
+    revision: number
+    originatingClientMutationId: ReturnType<typeof parseClientMutationId> | null
+  }> = {},
+): RealtimeEventDto {
   return realtimeEventDtoSchema.parse({
-    type: 'note.version_added',
-    noteId: parseNoteId('note_123'),
-    version: {
-      id: parseVersionId('ver_6'),
-      revision: 6,
-    },
+    eventType: 'NOTE_VERSION_CREATED',
     eventId: parseRealtimeEventId('evt_rt_2'),
+    sequence: overrides.sequence ?? 2,
+    occurredAt: UPDATED_AT,
+    noteId: parseNoteId('note_123'),
+    versionId: parseVersionId('ver_6'),
+    revision: overrides.revision ?? 6,
+    parentVersionId: parseVersionId('ver_5'),
+    updatedAt: UPDATED_AT,
+    author: {
+      id: parseUserId('usr_456'),
+      displayName: 'clinician_456',
+      role: 'CLINICIAN',
+    },
+    originatingClientMutationId:
+      overrides.originatingClientMutationId === undefined
+        ? null
+        : overrides.originatingClientMutationId,
+    summary: {
+      id: parseNoteId('note_123'),
+      status: 'IN_REVIEW',
+      currentVersionId: parseVersionId('ver_6'),
+      currentRevision: overrides.revision ?? 6,
+      assignedReviewer: null,
+      updatedAt: UPDATED_AT,
+    },
   })
 }
 
 export function buildPresenceRealtimeEventDto(): RealtimeEventDto {
   return realtimeEventDtoSchema.parse({
-    type: 'note.presence',
+    eventType: 'PRESENCE_SNAPSHOT',
+    eventId: parseRealtimeEventId('evt_rt_3'),
+    sequence: 3,
+    occurredAt: UPDATED_AT,
     noteId: parseNoteId('note_123'),
-    viewers: [
+    participants: [
       {
-        id: parseUserId('usr_a'),
+        sessionId: parseSessionId('ses_a'),
+        userId: parseUserId('usr_a'),
+        displayName: 'Alex',
         role: 'REVIEWER',
+        activity: 'VIEWING',
+        lastSeenAt: UPDATED_AT,
       },
     ],
-    eventId: parseRealtimeEventId('evt_rt_3'),
+  })
+}
+
+export function buildResyncRequiredRealtimeEventDto(): RealtimeEventDto {
+  return realtimeEventDtoSchema.parse({
+    eventType: 'RESYNC_REQUIRED',
+    eventId: parseRealtimeEventId('evt_rt_resync'),
+    sequence: 99,
+    occurredAt: UPDATED_AT,
+    noteId: null,
+    reason: 'Missed-event cursor is no longer retained; full resync required.',
   })
 }
