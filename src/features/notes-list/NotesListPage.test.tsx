@@ -11,6 +11,7 @@ import { seedMockDatabase } from '@/mock/seed/seed'
 import {
   DEFAULT_DEV_ADMIN_ACTOR,
   DEFAULT_DEV_CLINICIAN_ACTOR,
+  DEFAULT_DEV_READONLY_AUDITOR_ACTOR,
   resetActorIdentity,
   setActorIdentity,
 } from '@/services/api/actor-provider'
@@ -407,98 +408,96 @@ describe('NotesListPage', () => {
   })
 
   describe('regeneration role gating', () => {
-    it('REVIEWER sees disabled regeneration with correct message', async () => {
-      renderPage('/notes?status=FAILED')
+    async function selectFirstNoteRow(): Promise<void> {
       await waitFor(() => {
         expect(screen.getByRole('table')).toBeInTheDocument()
       })
+      const noteCheckbox = screen.getAllByRole('checkbox', { name: /Select note for/i })[0]
+      expect(noteCheckbox).toBeDefined()
+      fireEvent.click(noteCheckbox!)
+      expect(screen.getByTestId('bulk-action-toolbar')).toBeInTheDocument()
+    }
 
-      const checkboxes = screen.getAllByRole('checkbox')
-      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
-      if (noteCheckbox) {
-        fireEvent.click(noteCheckbox)
-      } else {
-        const firstRow = document.querySelector('[data-note-id]')
-        if (firstRow) {
-          fireEvent.click(firstRow)
-        }
-      }
+    it('REVIEWER sees disabled regeneration with correct message', async () => {
+      renderPage('/notes?status=FAILED')
+      await selectFirstNoteRow()
 
-      const toolbar = screen.queryByTestId('bulk-action-toolbar')
-      if (toolbar) {
-        const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
-        expect(regenButton).toBeDisabled()
-        expect(
-          screen.getByText('Only clinicians and administrators may request regeneration.'),
-        ).toBeInTheDocument()
-      }
+      const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+      expect(regenButton).toBeDisabled()
+      expect(
+        screen.getByText('Only clinicians and administrators may request regeneration.'),
+      ).toBeInTheDocument()
     })
 
     it('CLINICIAN sees enabled regeneration for FAILED notes', async () => {
       setActorIdentity(DEFAULT_DEV_CLINICIAN_ACTOR)
       renderPage('/notes?status=FAILED')
-      await waitFor(() => {
-        expect(screen.getByRole('table')).toBeInTheDocument()
-      })
+      await selectFirstNoteRow()
 
-      const checkboxes = screen.getAllByRole('checkbox')
-      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
-      if (noteCheckbox) {
-        fireEvent.click(noteCheckbox)
-      }
-
-      const toolbar = screen.queryByTestId('bulk-action-toolbar')
-      if (toolbar) {
-        const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
-        expect(regenButton).not.toBeDisabled()
-        expect(
-          screen.queryByText('Only clinicians and administrators may request regeneration.'),
-        ).not.toBeInTheDocument()
-      }
+      const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+      expect(regenButton).not.toBeDisabled()
+      expect(
+        screen.queryByText('Only clinicians and administrators may request regeneration.'),
+      ).not.toBeInTheDocument()
     })
 
-    it('ADMIN sees enabled regeneration for FAILED notes', async () => {
+    it('ADMIN sees enabled regeneration and assign controls for FAILED notes', async () => {
       setActorIdentity(DEFAULT_DEV_ADMIN_ACTOR)
       renderPage('/notes?status=FAILED')
-      await waitFor(() => {
-        expect(screen.getByRole('table')).toBeInTheDocument()
-      })
+      await selectFirstNoteRow()
 
-      const checkboxes = screen.getAllByRole('checkbox')
-      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
-      if (noteCheckbox) {
-        fireEvent.click(noteCheckbox)
-      }
+      const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+      expect(regenButton).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Assign reviewer' })).toBeInTheDocument()
+      expect(
+        screen.queryByText('Only administrators may assign reviewers.'),
+      ).not.toBeInTheDocument()
+    })
 
-      const toolbar = screen.queryByTestId('bulk-action-toolbar')
-      if (toolbar) {
-        const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
-        expect(regenButton).not.toBeDisabled()
-        expect(
-          screen.queryByText('Only clinicians and administrators may request regeneration.'),
-        ).not.toBeInTheDocument()
-      }
+    it('READONLY_AUDITOR cannot regenerate selected FAILED notes', async () => {
+      setActorIdentity(DEFAULT_DEV_READONLY_AUDITOR_ACTOR)
+      renderPage('/notes?status=FAILED')
+      await selectFirstNoteRow()
+
+      const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+      expect(regenButton).toBeDisabled()
+      expect(
+        screen.getByText('Only clinicians and administrators may request regeneration.'),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Assign reviewer' })).toBeDisabled()
+      expect(screen.getByText('Only administrators may assign reviewers.')).toBeInTheDocument()
     })
 
     it('non-FAILED selection shows "Regeneration is available only for failed notes."', async () => {
       setActorIdentity(DEFAULT_DEV_ADMIN_ACTOR)
       renderPage('/notes?status=APPROVED')
-      await waitFor(() => {
-        expect(screen.getByRole('table')).toBeInTheDocument()
+      await selectFirstNoteRow()
+
+      expect(
+        screen.getByText('Regeneration is available only for failed notes.'),
+      ).toBeInTheDocument()
+    })
+
+    it('UI authorization updates immediately after setActorIdentity without navigation', async () => {
+      renderPage('/notes?status=FAILED')
+      await selectFirstNoteRow()
+
+      expect(screen.getByRole('button', { name: 'Request regeneration' })).toBeDisabled()
+      expect(
+        screen.getByText('Only clinicians and administrators may request regeneration.'),
+      ).toBeInTheDocument()
+
+      await act(async () => {
+        setActorIdentity(DEFAULT_DEV_ADMIN_ACTOR)
       })
 
-      const checkboxes = screen.getAllByRole('checkbox')
-      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
-      if (noteCheckbox) {
-        fireEvent.click(noteCheckbox)
-      }
-
-      const toolbar = screen.queryByTestId('bulk-action-toolbar')
-      if (toolbar) {
-        expect(
-          screen.getByText('Regeneration is available only for failed notes.'),
-        ).toBeInTheDocument()
-      }
+      expect(screen.getByRole('button', { name: 'Request regeneration' })).not.toBeDisabled()
+      expect(
+        screen.queryByText('Only clinicians and administrators may request regeneration.'),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('Only administrators may assign reviewers.'),
+      ).not.toBeInTheDocument()
     })
   })
 })

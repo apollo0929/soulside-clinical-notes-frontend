@@ -6,7 +6,10 @@ import { notesKeys } from '@/features/notes-list/notes-query-keys'
 import { isApiClientError, isNetworkApiError } from '@/services/api/api-errors'
 import { getNoteDetail } from '@/services/api/note-detail-api'
 import { getConnectivityService } from '@/services/offline/connectivity'
-import { persistNoteDetailToOfflineCache } from '@/services/offline/offline-bootstrap'
+import {
+  isValidCachedNoteDetail,
+  persistNoteDetailToOfflineCache,
+} from '@/services/offline/offline-bootstrap'
 import { createReadCacheRepository } from '@/services/offline/read-cache.repository'
 
 /** Detail content changes infrequently during Step 7A read path. */
@@ -43,8 +46,10 @@ export function useNoteDetail(noteId: NoteId | null) {
           }
         }
         // Prefer durable IndexedDB detail over a remounted empty mock backend / transient fail.
+        // Validate before trusting: malformed cached payloads (missing authorId etc.) must be
+        // rejected here so parseUserId is never called with undefined during render.
         const cached = await createReadCacheRepository().getNoteDetail(noteId)
-        if (cached?.payload) {
+        if (cached?.payload && isValidCachedNoteDetail(cached.payload)) {
           return cached.payload as NoteDetailAggregate
         }
         throw error

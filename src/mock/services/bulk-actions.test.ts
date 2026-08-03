@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { authorize } from '@/domain/authorization'
 import { parseIsoDateTime } from '@/domain/datetime'
 import { parseClientMutationId, parseNoteId, parseUserId } from '@/domain/ids'
 import type { NoteStatus } from '@/domain/statuses'
@@ -8,6 +9,7 @@ import { MockDatabase } from '@/mock/database/repository'
 import { seedMockDatabase } from '@/mock/seed/seed'
 import { bulkAssignReviewer, MAX_BULK_ASSIGN_SIZE } from '@/mock/services/bulk-assign-reviewer'
 import { bulkRegenerateNotes, MAX_BULK_REGENERATE_SIZE } from '@/mock/services/bulk-regenerate'
+import { resolveNoteOwner } from '@/mock/services/transition'
 import { adminActor, auditorActor, clinicianActor, reviewerActor } from '@/mock/test/helpers'
 
 const OCCURRED_AT = parseIsoDateTime('2024-11-15T10:00:00.000Z')
@@ -406,27 +408,21 @@ describe('bulkRegenerateNotes', () => {
     expect(db.getNote(note.id)?.status).toBe('FAILED')
   })
 
-  it('CLINICIAN FAILED regeneration succeeds for owned note', () => {
-    const actor = clinicianActor(db)
-    const ownedFailed = db.listNotes().find((n) => {
-      if (n.status !== 'FAILED') {
-        return false
-      }
-      const firstVersion = [...db.listVersionsForNote(n.id)].sort(
-        (a, b) => a.revisionNumber - b.revisionNumber,
-      )[0]
-      return firstVersion?.authorId === actor.userId
-    })
-    if (!ownedFailed) {
-      return
-    }
-    const beforeEvents = db.listReviewEvents(ownedFailed.id).length
+  it('usr_clinician_42_1 FAILED regeneration succeeds for owned note_42_1', () => {
+    // note_42_1 (index=1) is deterministically FAILED and authored by clinicians[1%5]=usr_clinician_42_1
+    const actor = { userId: parseUserId('usr_clinician_42_1'), role: 'CLINICIAN' as const }
+    const noteId = parseNoteId('note_42_1')
+    const note = db.getNote(noteId)
+    expect(note?.status).toBe('FAILED')
+    const beforeEvents = db.listReviewEvents(noteId).length
+
     const result = bulkRegenerateNotes(db, {
       actor,
-      noteIds: [ownedFailed.id],
-      clientMutationId: parseClientMutationId('mut_regen_clinician_ok'),
+      noteIds: [noteId],
+      clientMutationId: parseClientMutationId('mut_regen_clinician_42_1_ok'),
       occurredAt: clock.now(),
     })
+
     expect(result.ok).toBe(true)
     if (!result.ok) {
       return
@@ -436,36 +432,33 @@ describe('bulkRegenerateNotes', () => {
     if (item.success) {
       expect(item.note.status).toBe('GENERATING')
     }
-    expect(db.getNote(ownedFailed.id)?.status).toBe('GENERATING')
-    expect(db.listReviewEvents(ownedFailed.id)).toHaveLength(beforeEvents + 1)
+    expect(db.getNote(noteId)?.status).toBe('GENERATING')
+    expect(db.listReviewEvents(noteId)).toHaveLength(beforeEvents + 1)
   })
 
-  it('CLINICIAN FAILED regeneration fails per-item for non-owned note', () => {
-    const actor = clinicianActor(db)
-    const nonOwnedFailed = db.listNotes().find((n) => {
-      if (n.status !== 'FAILED') {
-        return false
-      }
-      const firstVersion = [...db.listVersionsForNote(n.id)].sort(
-        (a, b) => a.revisionNumber - b.revisionNumber,
-      )[0]
-      return firstVersion?.authorId !== actor.userId
-    })
-    if (!nonOwnedFailed) {
-      return
-    }
+  it('usr_clinician_42_0 cannot regenerate note_42_1 (non-owner)', () => {
+    // note_42_1 is owned by usr_clinician_42_1, so usr_clinician_42_0 must be denied per-item
+    const actor = { userId: parseUserId('usr_clinician_42_0'), role: 'CLINICIAN' as const }
+    const noteId = parseNoteId('note_42_1')
+
     const result = bulkRegenerateNotes(db, {
       actor,
-      noteIds: [nonOwnedFailed.id],
-      clientMutationId: parseClientMutationId('mut_regen_clinician_unowned'),
+      noteIds: [noteId],
+      clientMutationId: parseClientMutationId('mut_regen_clinician_42_0_unowned'),
       occurredAt: clock.now(),
     })
+
     expect(result.ok).toBe(true)
     if (!result.ok) {
       return
     }
-    expect(result.response.results[0]?.success).toBe(false)
-    expect(db.getNote(nonOwnedFailed.id)?.status).toBe('FAILED')
+    const item = result.response.results[0]!
+    expect(item.success).toBe(false)
+    if (!item.success) {
+      expect(item.error.code).toBe('FORBIDDEN')
+      expect(item.error.message).toMatch(/clinician who owns/i)
+    }
+    expect(db.getNote(noteId)?.status).toBe('FAILED')
   })
 
   it('READONLY_AUDITOR regeneration denied at request level', () => {
@@ -568,6 +561,64 @@ describe('bulkRegenerateNotes', () => {
     if (!overLimit.ok) {
       expect(overLimit.error.code).toBe('INVALID_REQUEST')
       expect(overLimit.error.message).toContain(String(MAX_BULK_REGENERATE_SIZE))
+    }
+  })
+})
+
+describe('note ownership helper — resolveNoteOwner', () => {
+  it('note_42_1 owner is usr_clinician_42_1 (deterministic seed)', () => {
+    const db = seededDb()
+    const note = db.getNote(parseNoteId('note_42_1'))
+    expect(note).not.toBeNull()
+    const owner = resolveNoteOwner(db, note!)
+    expect(owner).toBe(parseUserId('usr_clinician_42_1'))
+  })
+
+  it('backend authorization and resolveNoteOwner agree for note_42_1 + usr_clinician_42_1', () => {
+    const db = seededDb()
+    const noteId = parseNoteId('note_42_1')
+    const note = db.getNote(noteId)!
+    const actorUserId = parseUserId('usr_clinician_42_1')
+    const owner = resolveNoteOwner(db, note)
+
+    expect(owner).toBe(actorUserId)
+
+    const auth = authorize({
+      permission: 'NOTE_REGENERATE',
+      actor: { userId: actorUserId, role: 'CLINICIAN' },
+      resource: {
+        kind: 'NOTE',
+        noteId,
+        clinicianId: owner!,
+        assignedReviewerId: note.assignedReviewerId,
+      },
+    })
+    expect(auth.allowed).toBe(true)
+  })
+
+  it('authorization denies usr_clinician_42_0 for note_42_1 (ownership mismatch)', () => {
+    const db = seededDb()
+    const noteId = parseNoteId('note_42_1')
+    const note = db.getNote(noteId)!
+    const wrongActorId = parseUserId('usr_clinician_42_0')
+    const owner = resolveNoteOwner(db, note)
+
+    expect(owner).not.toBe(wrongActorId)
+
+    const auth = authorize({
+      permission: 'NOTE_REGENERATE',
+      actor: { userId: wrongActorId, role: 'CLINICIAN' },
+      resource: {
+        kind: 'NOTE',
+        noteId,
+        clinicianId: owner!,
+        assignedReviewerId: note.assignedReviewerId,
+      },
+    })
+    expect(auth.allowed).toBe(false)
+    if (!auth.allowed) {
+      expect(auth.reasonCode).toBe('NOTE_OWNERSHIP_REQUIRED')
+      expect(auth.reason).toMatch(/clinician who owns/i)
     }
   })
 })

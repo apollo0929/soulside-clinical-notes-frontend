@@ -9,6 +9,7 @@ import {
 } from '@/domain/mappers'
 import type { Note } from '@/domain/models/note'
 import type { NoteVersion } from '@/domain/models/note-version'
+import { noteDetailDtoSchema } from '@/domain/schemas'
 import {
   buildNoteDetailDto,
   buildNoteListItemDto,
@@ -120,6 +121,28 @@ describe('DTO-to-domain mappers', () => {
     expect(version.content.plan).toBe(dto.currentVersion.content.sections.P)
     expect(version.noteId).toBe(dto.id)
   })
+})
+
+// ── Test 6: missing required authoredBy ID rejected at DTO boundary ─────────
+it('6: note-detail DTO parse fails when authoredBy.id is missing (schema boundary, not render)', () => {
+  const dto = buildNoteDetailDto()
+  // Simulate a backend bug: authoredBy present but id is missing
+  const broken = {
+    ...dto,
+    currentVersion: {
+      ...dto.currentVersion,
+      authoredBy: {
+        // id intentionally absent — noteDetailDtoSchema must reject this
+        role: 'CLINICIAN',
+      },
+    },
+  }
+  const result = noteDetailDtoSchema.safeParse(broken)
+  expect(result.success).toBe(false)
+  if (!result.success) {
+    const fields = result.error.issues.map((i) => i.path.join('.'))
+    expect(fields.some((f) => f.includes('id') || f.includes('authoredBy'))).toBe(true)
+  }
 })
 
 describe('fixture builders', () => {

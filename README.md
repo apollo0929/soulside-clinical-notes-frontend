@@ -39,8 +39,8 @@ Opens the Vite development server (default `http://localhost:5173`).
 In development, the app bootstraps the MSW mock backend once and seeds the default
 dataset (`seed: 42`, `noteCount: 48`) via `POST /api/dev/seed`. The active list actor is
 the fixed reviewer `usr_reviewer_42_0` (headers via the API client actor provider).
-Bulk assign/regenerate require the ADMIN actor (`usr_admin_42`); in DEV the actor
-API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
+In DEV the actor API is exposed on `globalThis.__SOULSIDE_ACTOR__` for role switching
+(see **Actor switching** below).
 
 ### Notes list
 
@@ -50,17 +50,53 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
   - `/notes?q=avery&sort=patientDisplayName&direction=asc`
   - `/notes?reviewer=usr_reviewer_42_0&from=2024-06-01T00:00:00.000Z`
 - Selection is page-local (not URL). “Select all” covers loaded visible rows only.
-- Bulk assign (ADMIN): sets reviewer without changing status; partial success supported.
-- Bulk regenerate (ADMIN): `FAILED → GENERATING` via lifecycle; partial success supported.
-- Failed items stay selected; successful items are deselected.
+- **Bulk assign (ADMIN only):** sets reviewer without changing status; partial success supported.
+- **Bulk regenerate:**
+  - **ADMIN** may regenerate any note where the lifecycle permits regeneration (`FAILED → GENERATING`).
+  - **CLINICIAN** may regenerate only **FAILED** notes they own (lowest-revision / first-version author).
+  - Partial success supported; failed items stay selected; successful items are deselected.
 - Focused unit tests: `pnpm test -- src/features/notes-list src/services/api src/mock/services/bulk-actions.test.ts`
 - Playwright: `pnpm test:e2e -- e2e/notes-list.spec.ts e2e/notes-bulk.spec.ts`
+
+### Actor switching (DEV console)
+
+Paste into the browser console on `http://localhost:5173` after the app has loaded:
+
+```js
+// Inspect / reset
+globalThis.__SOULSIDE_ACTOR__.getActorIdentity()
+globalThis.__SOULSIDE_ACTOR__.resetActorIdentity()
+
+// Predefined actors
+globalThis.__SOULSIDE_ACTOR__.setActorIdentity(
+  globalThis.__SOULSIDE_ACTOR__.DEFAULT_DEV_ADMIN_ACTOR,
+)
+globalThis.__SOULSIDE_ACTOR__.setActorIdentity(
+  globalThis.__SOULSIDE_ACTOR__.DEFAULT_DEV_REVIEWER_ACTOR,
+)
+globalThis.__SOULSIDE_ACTOR__.setActorIdentity(
+  globalThis.__SOULSIDE_ACTOR__.DEFAULT_DEV_READONLY_AUDITOR_ACTOR,
+)
+
+// Clinician who owns deterministic FAILED notes such as note_42_1
+globalThis.__SOULSIDE_ACTOR__.setActorIdentity({
+  userId: 'usr_clinician_42_1',
+  role: 'CLINICIAN',
+})
+```
+
+List and detail authorization UI re-renders immediately after `setActorIdentity` /
+`resetActorIdentity`. API request headers are always read from the current actor at
+request time.
 
 ### Note detail (Steps 7A–9)
 
 - Route: `/notes/:noteId` (patient name links from the list preserve list URL filters via navigation state).
 - Shows SOAP content, version history, word-level SOAP diff for any two selected versions, and review timeline.
-- Lifecycle actions are presented as a read-only availability summary (no transition mutations yet).
+- **Lifecycle actions** on the detail page are a **diagnostic availability preview** only
+  (allowed/denied reasons from authorization + lifecycle). They are not executable controls.
+  Interactive mutations live on the **notes list bulk toolbar** (assign / regenerate) and the
+  **SOAP editor autosave / conflict resolve** flows.
 - Version bodies are fetched on demand for selected historical versions only.
 - **SOAP editor (7B):** read-only by default. When access allows, **Edit note** opens a draft editor.
   - Editable when `NOTE_EDIT` + version-save policy allow: `IN_REVIEW` (assigned reviewer/ADMIN), `REJECTED`/`AMENDED` (owning clinician/ADMIN).

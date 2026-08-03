@@ -32,6 +32,7 @@ import { createNoteVersion } from '@/services/api/create-version-api'
 import { getConnectivityService } from '@/services/offline/connectivity'
 import { getActiveReplayCoordinator } from '@/services/offline/offline-bootstrap'
 import { createQueuedWriteRepository } from '@/services/offline/queued-write.repository'
+import { registerLocalMutation } from '@/services/realtime/realtime-bootstrap'
 import {
   bucketDurationMs,
   classifyTelemetryError,
@@ -145,11 +146,9 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
       authorId: parseUserId(actor.userId),
       authorRole: actor.role,
     })
-    void import('@/services/realtime').then(({ registerLocalMutation }) => {
-      registerLocalMutation({
-        mutationId: event.intent.clientMutationId,
-        versionId: event.versionId,
-      })
+    registerLocalMutation({
+      mutationId: event.intent.clientMutationId,
+      versionId: event.versionId,
     })
   })
 
@@ -186,7 +185,6 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
               }),
             )
             try {
-              const { registerLocalMutation } = await import('@/services/realtime')
               registerLocalMutation({ mutationId: intent.clientMutationId })
               const result = await createNoteVersion(
                 {

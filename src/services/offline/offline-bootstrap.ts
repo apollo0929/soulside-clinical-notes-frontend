@@ -175,6 +175,31 @@ export async function persistNoteListToOfflineCache(
   }
 }
 
+/**
+ * Lightweight structural guard for a deserialized NoteDetailAggregate.
+ * Rejects payloads that have lost required user-ID fields during schema
+ * evolution or IndexedDB corruption before they reach React components.
+ */
+export function isValidCachedNoteDetail(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') {
+    return false
+  }
+  const p = payload as Record<string, unknown>
+  const note = p.note as Record<string, unknown> | undefined
+  const currentVersion = p.currentVersion as Record<string, unknown> | undefined
+  return (
+    typeof note === 'object' &&
+    note !== null &&
+    typeof note.id === 'string' &&
+    typeof currentVersion === 'object' &&
+    currentVersion !== null &&
+    typeof currentVersion.authorId === 'string' &&
+    currentVersion.authorId.trim() !== '' &&
+    Array.isArray(p.versions) &&
+    Array.isArray(p.reviewEvents)
+  )
+}
+
 export function resetOfflineBootstrapForTests(): void {
   bootstrapEpoch += 1
   activeCoordinator?.dispose()

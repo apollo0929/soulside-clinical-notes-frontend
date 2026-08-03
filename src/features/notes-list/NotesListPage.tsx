@@ -32,9 +32,10 @@ import { useBulkAssignReviewer } from '@/features/notes-list/use-bulk-assign-rev
 import { useBulkRegenerate } from '@/features/notes-list/use-bulk-regenerate'
 import { useDebouncedValue } from '@/features/notes-list/use-debounced-search-param'
 import { getNotesListErrorMessage, useNotesList } from '@/features/notes-list/use-notes-list'
-import { DEFAULT_DEV_SEED, getActorIdentity } from '@/services/api/actor-provider'
+import { DEFAULT_DEV_SEED } from '@/services/api/actor-provider'
 import { isApiClientError } from '@/services/api/api-errors'
 import type { NotesListSortDirection, NotesListSortField } from '@/services/api/notes-api'
+import { useActorIdentity } from '@/services/api/use-actor-identity'
 import { getConnectivityService } from '@/services/offline/connectivity'
 import {
   createBulkActionCompletedEvent,
@@ -209,7 +210,7 @@ export function NotesListPage() {
 
   const selectAllState = getSelectAllCheckboxState(selection.selectedIds, visibleIds)
   const selectedCount = selection.selectedIds.size
-  const actor = getActorIdentity()
+  const actor = useActorIdentity()
   const isAdmin = actor.role === 'ADMIN'
   const isClinician = actor.role === 'CLINICIAN'
 

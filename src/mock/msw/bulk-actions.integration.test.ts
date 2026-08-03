@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { parseIsoDateTime } from '@/domain/datetime'
+import { parseNoteId, parseUserId } from '@/domain/ids'
 import {
   bulkAssignReviewerResponseDtoSchema,
   bulkRegenerateResponseDtoSchema,
@@ -8,7 +9,7 @@ import {
 import { ACTOR_USER_ID_HEADER, ACTOR_USER_ROLE_HEADER } from '@/mock/msw/actor-headers'
 import { createMockBackendNodeServer } from '@/mock/msw/node'
 import { seedMockDatabase } from '@/mock/seed/seed'
-import { adminActor, auditorActor, clinicianActor, reviewerActor } from '@/mock/test/helpers'
+import { adminActor, auditorActor, reviewerActor } from '@/mock/test/helpers'
 
 describe('MSW bulk-actions integration', () => {
   const { backend, server } = createMockBackendNodeServer()
@@ -127,27 +128,19 @@ describe('MSW bulk-actions integration', () => {
     expect(body.error.code).toBe('FORBIDDEN')
   })
 
-  it('POST /api/notes/bulk/regenerate CLINICIAN succeeds for owned FAILED note', async () => {
-    const clinician = clinicianActor(backend.database)
-    const ownedFailed = backend.database.listNotes().find((n) => {
-      if (n.status !== 'FAILED') {
-        return false
-      }
-      const firstVersion = [...backend.database.listVersionsForNote(n.id)].sort(
-        (a, b) => a.revisionNumber - b.revisionNumber,
-      )[0]
-      return firstVersion?.authorId === clinician.userId
-    })
-    if (!ownedFailed) {
-      return
-    }
+  it('POST /api/notes/bulk/regenerate usr_clinician_42_1 succeeds for owned note_42_1', async () => {
+    // note_42_1 is deterministically FAILED and owned by usr_clinician_42_1 (index 1 mod 5)
+    const actorId = parseUserId('usr_clinician_42_1')
+    const noteId = parseNoteId('note_42_1')
+
+    expect(backend.database.getNote(noteId)?.status).toBe('FAILED')
 
     const response = await fetch('http://localhost/api/notes/bulk/regenerate', {
       method: 'POST',
-      headers: headersFor(clinician),
+      headers: headersFor({ userId: actorId, role: 'CLINICIAN' }),
       body: JSON.stringify({
-        noteIds: [ownedFailed.id],
-        clientMutationId: 'mut_http_regen_clinician_ok',
+        noteIds: [noteId],
+        clientMutationId: 'mut_http_regen_clinician_42_1_ok',
       }),
     })
 
@@ -159,7 +152,33 @@ describe('MSW bulk-actions integration', () => {
     if (parsed.results[0]?.success) {
       expect(parsed.results[0].note.status).toBe('GENERATING')
     }
-    expect(backend.database.getNote(ownedFailed.id)?.status).toBe('GENERATING')
+    expect(backend.database.getNote(noteId)?.status).toBe('GENERATING')
+  })
+
+  it('POST /api/notes/bulk/regenerate usr_clinician_42_0 denied per-item for note_42_1 (non-owner)', async () => {
+    // note_42_1 is owned by usr_clinician_42_1; usr_clinician_42_0 must fail the per-note ownership check
+    const actorId = parseUserId('usr_clinician_42_0')
+    const noteId = parseNoteId('note_42_1')
+
+    expect(backend.database.getNote(noteId)?.status).toBe('FAILED')
+
+    const response = await fetch('http://localhost/api/notes/bulk/regenerate', {
+      method: 'POST',
+      headers: headersFor({ userId: actorId, role: 'CLINICIAN' }),
+      body: JSON.stringify({
+        noteIds: [noteId],
+        clientMutationId: 'mut_http_regen_clinician_42_0_unowned',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body: unknown = await response.json()
+    const parsed = bulkRegenerateResponseDtoSchema.parse(body)
+    expect(parsed.results[0]?.success).toBe(false)
+    if (!parsed.results[0]?.success) {
+      expect(parsed.results[0]?.error.code).toBe('FORBIDDEN')
+    }
+    expect(backend.database.getNote(noteId)?.status).toBe('FAILED')
   })
 
   it('POST regenerate returns 403 for REVIEWER', async () => {

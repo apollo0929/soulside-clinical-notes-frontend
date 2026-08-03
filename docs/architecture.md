@@ -149,9 +149,10 @@ Aborted waits reject as typed `ABORTED`.
 applies declarative effects, appends one `ReviewEvent` on success, and uses
 copy-validate-commit semantics so failed transitions leave state unchanged.
 
-**Deferred to later steps:** TanStack Query hooks beyond list, Zustand stores for
-selection/bulk actions, editor/autosave, IndexedDB, offline replay, WebSocket/SSE,
-presence, telemetry, and three-way merge UI.
+**Implemented beyond the dummy backend core:** notes list (TanStack Query +
+virtualization), note detail, SOAP editor/autosave, three-way conflict resolution,
+IndexedDB offline queue and replay, mock SSE realtime with presence, and
+privacy-safe telemetry. Selection/bulk UI uses local React state (not Zustand).
 
 ## Notes List Read Path
 
@@ -574,9 +575,10 @@ new mutation id. There is no automatic retry.
 over the ordinary discard dialog (only one confirmation surface). Leaving silently is not
 allowed.
 
-**Still deferred:** SSE / WebSocket missed-event replay, presence, telemetry, CRDT, and PWA
-background sync remain out of scope for Step 9?10 online conflict resolution. Offline queue
-and resumable replay are covered in **Offline Queue and Resumability** below.
+**Out of scope for Step 9–10 online conflict resolution:** CRDT merge and PWA
+background sync. SSE missed-event replay, presence, and telemetry are covered in
+later architecture sections (**Realtime**, **Presence**, **Telemetry**). Offline
+queue and resumable replay are covered in **Offline Queue and Resumability** below.
 
 ```mermaid
 sequenceDiagram

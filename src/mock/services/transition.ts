@@ -216,10 +216,19 @@ export function transitionNote(db: MockDatabase, input: TransitionNoteInput): Tr
   }
 }
 
-function resolveClinicianId(db: MockDatabase, note: Note): UserId | null {
+/**
+ * Derives note ownership from the lowest-revision version's authorId.
+ * Exported as the single authoritative definition used by authorization,
+ * seed inspection, and tests — never duplicated as an array-index assumption.
+ */
+export function resolveNoteOwner(db: MockDatabase, note: Note): UserId | null {
   const versions = db.listVersionsForNote(note.id)
   const first = [...versions].sort((a, b) => a.revisionNumber - b.revisionNumber)[0]
   return first?.authorId ?? null
+}
+
+function resolveClinicianId(db: MockDatabase, note: Note): UserId | null {
+  return resolveNoteOwner(db, note)
 }
 
 function findLatestApprovalTimestamp(db: MockDatabase, noteId: NoteId): IsoDateTime | null {

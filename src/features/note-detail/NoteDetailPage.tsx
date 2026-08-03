@@ -51,8 +51,8 @@ import {
 } from '@/features/note-detail/version-comparison-reducer'
 import { VersionHistory } from '@/features/note-detail/VersionHistory'
 import { NotePresence } from '@/features/presence/NotePresence'
-import { getActorIdentity } from '@/services/api/actor-provider'
 import { isApiClientError, isNetworkApiError } from '@/services/api/api-errors'
+import { useActorIdentity } from '@/services/api/use-actor-identity'
 import { getConnectivityService } from '@/services/offline/connectivity'
 import { createQueuedWriteRepository } from '@/services/offline/queued-write.repository'
 import { subscribeReplaySuccess } from '@/services/offline/replay-success-bus'
@@ -173,7 +173,7 @@ export function NoteDetailPage() {
     return resolveClinicianOwnerId(aggregate.versions, aggregate.currentVersion.authorId)
   }, [aggregate])
 
-  const actorIdentity = getActorIdentity()
+  const actorIdentity = useActorIdentity()
   const actor = useMemo(
     () => ({
       userId: parseUserId(actorIdentity.userId),
@@ -365,8 +365,10 @@ export function NoteDetailPage() {
       aggregate,
       clinicianId,
       occurredAt: getUiOccurredAt(),
+      actorUserId: actorIdentity.userId,
+      actorRole: actorIdentity.role,
     })
-  }, [aggregate, clinicianId])
+  }, [aggregate, clinicianId, actorIdentity.userId, actorIdentity.role])
 
   if (noteId === null) {
     return (

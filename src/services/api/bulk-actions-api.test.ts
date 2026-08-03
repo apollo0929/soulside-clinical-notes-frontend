@@ -171,6 +171,71 @@ describe('bulk-actions-api', () => {
     })
   })
 
+  it('setActorIdentity to usr_clinician_42_1 sends that userId in regenerate headers', async () => {
+    setActorIdentity({ userId: 'usr_clinician_42_1', role: 'CLINICIAN' })
+
+    let seenUserId: string | null = null
+    let seenRole: string | null = null
+    const noteId = parseNoteId('note_header_probe')
+
+    server.use(
+      http.post('*/api/notes/bulk/regenerate', async ({ request }) => {
+        seenUserId = request.headers.get(ACTOR_USER_ID_HEADER)
+        seenRole = request.headers.get(ACTOR_USER_ROLE_HEADER)
+        return HttpResponse.json({
+          results: [{ noteId, success: false, error: { code: 'PROBE', message: 'probe' } }],
+        })
+      }),
+    )
+
+    await regenerateNotesBulk({
+      noteIds: [noteId],
+      clientMutationId: parseClientMutationId('mut_api_regen_clinician_header'),
+    })
+
+    expect(seenUserId).toBe('usr_clinician_42_1')
+    expect(seenRole).toBe('CLINICIAN')
+  })
+
+  it('actor switching does not leave stale headers in subsequent regenerate requests', async () => {
+    const capturedIds: string[] = []
+    const noteId1 = parseNoteId('note_stale_probe_1')
+    const noteId2 = parseNoteId('note_stale_probe_2')
+
+    server.use(
+      http.post('*/api/notes/bulk/regenerate', async ({ request }) => {
+        const uid = request.headers.get(ACTOR_USER_ID_HEADER)
+        if (uid) {
+          capturedIds.push(uid)
+        }
+        const body = (await request.json()) as { noteIds: string[] }
+        return HttpResponse.json({
+          results: body.noteIds.map((id) => ({
+            noteId: id,
+            success: false,
+            error: { code: 'PROBE', message: 'probe' },
+          })),
+        })
+      }),
+    )
+
+    setActorIdentity({ userId: 'usr_clinician_42_1', role: 'CLINICIAN' })
+    await regenerateNotesBulk({
+      noteIds: [noteId1],
+      clientMutationId: parseClientMutationId('mut_api_regen_switch_1'),
+    })
+
+    setActorIdentity({ userId: 'usr_admin_42', role: 'ADMIN' })
+    await regenerateNotesBulk({
+      noteIds: [noteId2],
+      clientMutationId: parseClientMutationId('mut_api_regen_switch_2'),
+    })
+
+    expect(capturedIds).toHaveLength(2)
+    expect(capturedIds[0]).toBe('usr_clinician_42_1')
+    expect(capturedIds[1]).toBe('usr_admin_42')
+  })
+
   it('maps typed backend errors from assign-reviewer', async () => {
     server.use(
       http.post('*/api/notes/bulk/assign-reviewer', () => {

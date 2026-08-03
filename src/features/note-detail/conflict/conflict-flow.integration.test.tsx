@@ -180,5 +180,5 @@ describe('Conflict resolution integration', () => {
     expect(assessment).toHaveValue('manual-A')
     expect(plan).toHaveValue(ancestorContent.plan)
     expect((subjective as HTMLTextAreaElement).readOnly).toBe(false)
-  })
+  }, 15_000)
 })

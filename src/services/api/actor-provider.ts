@@ -1,4 +1,5 @@
 import type { UserRole } from '@/domain/roles'
+import { userRoleSchema } from '@/domain/schemas/primitives'
 
 export const ACTOR_USER_ID_HEADER = 'x-user-id'
 export const ACTOR_USER_ROLE_HEADER = 'x-user-role'
@@ -49,6 +50,24 @@ export const DEFAULT_DEV_READONLY_AUDITOR_ACTOR: ActorIdentity = Object.freeze({
 })
 
 let currentActor: ActorIdentity = DEFAULT_DEV_REVIEWER_ACTOR
+const actorListeners = new Set<() => void>()
+
+function notifyActorListeners(): void {
+  for (const listener of actorListeners) {
+    listener()
+  }
+}
+
+/**
+ * Subscribe to actor identity changes. Compatible with useSyncExternalStore.
+ * Returns an unsubscribe function.
+ */
+export function subscribeActorIdentity(listener: () => void): () => void {
+  actorListeners.add(listener)
+  return () => {
+    actorListeners.delete(listener)
+  }
+}
 
 export function getActorIdentity(): ActorIdentity {
   return currentActor
@@ -56,13 +75,43 @@ export function getActorIdentity(): ActorIdentity {
 
 /**
  * Replace the active development actor. Intended for future role-switch UI.
+ *
+ * Validates at runtime so that calls from the browser console (which bypass
+ * TypeScript) fail immediately with a clear message instead of producing an
+ * undefined userId that crashes later in parseUserId, or an invalid role.
  */
 export function setActorIdentity(actor: ActorIdentity): void {
-  currentActor = actor
+  if (!actor || typeof actor.userId !== 'string' || actor.userId.trim() === '') {
+    throw new Error(
+      `setActorIdentity: actor.userId must be a non-empty string (received ${JSON.stringify((actor as Record<string, unknown>)?.userId)}).`,
+    )
+  }
+  const roleResult = userRoleSchema.safeParse(actor.role)
+  if (!roleResult.success) {
+    throw new Error(
+      `setActorIdentity: actor.role must be one of CLINICIAN | REVIEWER | ADMIN | READONLY_AUDITOR (received ${JSON.stringify((actor as Record<string, unknown>)?.role)}).`,
+    )
+  }
+  const next: ActorIdentity = {
+    userId: actor.userId.trim(),
+    role: roleResult.data,
+  }
+  if (currentActor.userId === next.userId && currentActor.role === next.role) {
+    return
+  }
+  currentActor = next
+  notifyActorListeners()
 }
 
 export function resetActorIdentity(): void {
+  if (
+    currentActor.userId === DEFAULT_DEV_REVIEWER_ACTOR.userId &&
+    currentActor.role === DEFAULT_DEV_REVIEWER_ACTOR.role
+  ) {
+    return
+  }
   currentActor = DEFAULT_DEV_REVIEWER_ACTOR
+  notifyActorListeners()
 }
 
 /**
@@ -73,6 +122,7 @@ export type SoulsideActorApi = {
   setActorIdentity: typeof setActorIdentity
   getActorIdentity: typeof getActorIdentity
   resetActorIdentity: typeof resetActorIdentity
+  subscribeActorIdentity: typeof subscribeActorIdentity
   DEFAULT_DEV_ADMIN_ACTOR: typeof DEFAULT_DEV_ADMIN_ACTOR
   DEFAULT_DEV_REVIEWER_ACTOR: typeof DEFAULT_DEV_REVIEWER_ACTOR
   DEFAULT_DEV_CLINICIAN_ACTOR: typeof DEFAULT_DEV_CLINICIAN_ACTOR
@@ -87,6 +137,7 @@ export function installDevActorApi(): void {
     setActorIdentity,
     getActorIdentity,
     resetActorIdentity,
+    subscribeActorIdentity,
     DEFAULT_DEV_ADMIN_ACTOR,
     DEFAULT_DEV_REVIEWER_ACTOR,
     DEFAULT_DEV_CLINICIAN_ACTOR,

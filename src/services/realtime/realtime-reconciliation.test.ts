@@ -131,6 +131,47 @@ describe('realtime reconciliation helpers', () => {
     ).toBe(false)
   })
 
+  // ── Test 8: realtime reconciliation preserves required user-ID fields ────────
+  it('8: applyVersionCreatedToDetail preserves currentVersion.authorId after reconciliation', () => {
+    const aggregate = baseAggregate(5)
+    const originalAuthorId = aggregate.currentVersion.authorId
+    expect(typeof originalAuthorId).toBe('string')
+    expect(originalAuthorId.trim()).not.toBe('')
+
+    const event = buildVersionAddedRealtimeEventDto({
+      revision: 6,
+    }) as NoteVersionCreatedEventDto
+
+    const next = applyVersionCreatedToDetail(aggregate, event)
+    expect(next).not.toBeNull()
+
+    // The new currentVersion gets its authorId from the event.author.id
+    expect(typeof next!.currentVersion.authorId).toBe('string')
+    expect(next!.currentVersion.authorId.trim()).not.toBe('')
+
+    // The version ref added to the versions array also carries authorId
+    const newRef = next!.versions.find((v) => v.id === event.versionId)
+    expect(newRef).toBeDefined()
+    expect(typeof newRef!.authorId).toBe('string')
+    expect(newRef!.authorId.trim()).not.toBe('')
+  })
+
+  it('8b: applyStatusOrReviewerToDetail preserves all version authorId fields', () => {
+    const aggregate = baseAggregate()
+    const event = buildStatusChangedRealtimeEventDto() as ReturnType<
+      typeof buildStatusChangedRealtimeEventDto
+    > & { eventType: 'NOTE_STATUS_CHANGED' }
+
+    const next = applyStatusOrReviewerToDetail(aggregate, event)
+
+    // currentVersion untouched — authorId must still be a non-empty string
+    expect(typeof next.currentVersion.authorId).toBe('string')
+    expect(next.currentVersion.authorId.trim()).not.toBe('')
+
+    // note.assignedReviewerId preserved from summary (summary in fixture: has reviewer)
+    expect(next.note.assignedReviewerId).not.toBeUndefined()
+  })
+
   it('20–23: classifyVersionEventAgainstEditor self/stale/dirty/clean', () => {
     const event = buildVersionAddedRealtimeEventDto({
       originatingClientMutationId: parseClientMutationId('mut_local'),

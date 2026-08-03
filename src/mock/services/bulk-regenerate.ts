@@ -31,7 +31,7 @@ export type BulkRegenerateResult =
 /**
  * Transport-independent bulk regeneration.
  *
- * - Request-wide auth: NOTE_BULK_REGENERATE (ADMIN)
+ * - Request-wide auth: NOTE_BULK_REGENERATE (CLINICIAN or ADMIN)
  * - Per-note: existing transitionNote with REGENERATE / USER
  * - Successful FAILED -> GENERATING appends one ReviewEvent via transition service
  * - Partial success across notes

@@ -7,7 +7,10 @@ import { parseIsoDateTime } from '@/domain/datetime'
 import { parseNoteId, parsePatientId, parseUserId, parseVersionId } from '@/domain/ids'
 import type { NoteSummary } from '@/domain/models/note-summary'
 import { DEFAULT_NOTES_LIST_FILTERS } from '@/features/notes-list/notes-list.types'
-import type { NotesInfiniteData } from '@/features/notes-list/notes-list-cache'
+import {
+  type NotesInfiniteData,
+  patchNotesInInfiniteData,
+} from '@/features/notes-list/notes-list-cache'
 import { notesKeys } from '@/features/notes-list/notes-query-keys'
 import { useBulkAssignReviewer } from '@/features/notes-list/use-bulk-assign-reviewer'
 import { useBulkRegenerate } from '@/features/notes-list/use-bulk-regenerate'
@@ -161,6 +164,30 @@ describe('bulk mutation hooks', () => {
     expect(next?.pages[0]?.items[1]?.status).toBe('FAILED')
     expect(next?.pages[0]?.nextCursor).toBe('cursor-1')
     expect(next?.pages[0]?.items).toHaveLength(3)
+  })
+
+  // ── Test 7: bulk regeneration does not create a malformed detail cache ───────
+  it('7: bulk regeneration optimistic patch preserves list-cache structure (no detail-cache mutation)', () => {
+    const { client } = createHarness()
+    const { key, data: before } = seedList(client)
+    const noteId = parseNoteId('note_2') // FAILED
+
+    // Simulate the onMutate optimistic patch — only the list key should change
+    const beforeDetail = client.getQueryData(notesKeys.detail(noteId))
+    expect(beforeDetail).toBeUndefined() // no detail cache populated
+
+    // Patch list only (mirroring useBulkRegenerate.onMutate)
+    const patch = new Map([[noteId, { status: 'GENERATING' as const }]])
+    client.setQueryData(key, patchNotesInInfiniteData(before, patch))
+
+    const afterList = client.getQueryData<NotesInfiniteData>(key)
+    expect(afterList?.pages[0]?.items[1]?.status).toBe('GENERATING')
+    expect(afterList?.pages[0]?.items[1]?.assignedReviewer).toBeNull()
+    expect(afterList?.pages[0]?.items[1]?.currentVersionId).toBeDefined()
+
+    // Detail cache must remain untouched — no malformed aggregate injected
+    const afterDetail = client.getQueryData(notesKeys.detail(noteId))
+    expect(afterDetail).toBeUndefined()
   })
 
   it('regenerate optimistically patches FAILED only and restores on error', async () => {

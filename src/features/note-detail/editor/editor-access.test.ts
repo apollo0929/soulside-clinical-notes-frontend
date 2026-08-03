@@ -64,6 +64,44 @@ describe('evaluateEditorAccess', () => {
     ).toBe(false)
   })
 
+  // ── Test 3: null assignedReviewerId does not crash lifecycle/editor-access ──
+  it('3: evaluateEditorAccess and resolveClinicianOwnerId handle null assignedReviewerId', () => {
+    // FAILED note: reviewer not assigned → assignedReviewerId is null
+    const failedAccess = evaluateEditorAccess({
+      actor: { userId: ownerId, role: 'CLINICIAN' },
+      noteId,
+      status: 'FAILED',
+      clinicianId: ownerId,
+      assignedReviewerId: null,
+    })
+    // FAILED notes are not editable (save policy blocks it)
+    expect(failedAccess.editable).toBe(false)
+    if (!failedAccess.editable) {
+      expect(failedAccess.reasonCode).toBeDefined()
+    }
+
+    // A reviewer trying to access a FAILED note with null assignedReviewerId must not crash
+    const reviewerAccess = evaluateEditorAccess({
+      actor: { userId: reviewerId, role: 'REVIEWER' },
+      noteId,
+      status: 'FAILED',
+      clinicianId: ownerId,
+      assignedReviewerId: null,
+    })
+    expect(reviewerAccess.editable).toBe(false)
+
+    // resolveClinicianOwnerId with a single version (no null confusion)
+    const ownerFromVersions = resolveClinicianOwnerId(
+      [{ revisionNumber: 1, authorId: ownerId }],
+      otherClinician,
+    )
+    expect(ownerFromVersions).toBe(ownerId)
+
+    // Empty versions falls back to fallback authorId, never crashes
+    const fallback = resolveClinicianOwnerId([], otherClinician)
+    expect(fallback).toBe(otherClinician)
+  })
+
   it('35–36: ADMIN matches save policy; ownership helper uses lowest revision', () => {
     expect(access({ role: 'ADMIN', userId: adminId, status: 'IN_REVIEW' }).editable).toBe(true)
     expect(access({ role: 'ADMIN', userId: adminId, status: 'REJECTED' }).editable).toBe(true)

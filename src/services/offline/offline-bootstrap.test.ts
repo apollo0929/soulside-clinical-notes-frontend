@@ -11,6 +11,7 @@ import {
 } from '@/services/offline/connectivity'
 import {
   ensureOfflineBootstrap,
+  isValidCachedNoteDetail,
   resetOfflineBootstrapForTests,
 } from '@/services/offline/offline-bootstrap'
 import {
@@ -63,5 +64,64 @@ describe('offline bootstrap', () => {
     expect(queryClient.getQueryData(notesKeys.detail(noteId))).toMatchObject({ boot: true })
     first.dispose()
     resetOfflineBootstrapForTests()
+  })
+})
+
+describe('isValidCachedNoteDetail', () => {
+  const validPayload = {
+    note: { id: 'note_1' },
+    currentVersion: { authorId: 'usr_clinician_42_1' },
+    versions: [],
+    reviewEvents: [],
+  }
+
+  it('accepts a structurally valid detail payload', () => {
+    expect(isValidCachedNoteDetail(validPayload)).toBe(true)
+  })
+
+  it('rejects missing currentVersion', () => {
+    const { currentVersion: _removed, ...rest } = validPayload
+    expect(isValidCachedNoteDetail(rest)).toBe(false)
+  })
+
+  it('rejects missing currentVersion.authorId', () => {
+    expect(
+      isValidCachedNoteDetail({
+        ...validPayload,
+        currentVersion: {},
+      }),
+    ).toBe(false)
+  })
+
+  it('rejects malformed authorId (empty or non-string)', () => {
+    expect(
+      isValidCachedNoteDetail({
+        ...validPayload,
+        currentVersion: { authorId: '   ' },
+      }),
+    ).toBe(false)
+    expect(
+      isValidCachedNoteDetail({
+        ...validPayload,
+        currentVersion: { authorId: 42 },
+      }),
+    ).toBe(false)
+  })
+
+  it('rejects missing required note fields', () => {
+    expect(isValidCachedNoteDetail(null)).toBe(false)
+    expect(isValidCachedNoteDetail({})).toBe(false)
+    expect(
+      isValidCachedNoteDetail({
+        ...validPayload,
+        note: {},
+      }),
+    ).toBe(false)
+    expect(
+      isValidCachedNoteDetail({
+        ...validPayload,
+        versions: 'not-an-array',
+      }),
+    ).toBe(false)
   })
 })
