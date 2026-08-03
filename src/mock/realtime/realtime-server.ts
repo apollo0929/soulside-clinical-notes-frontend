@@ -322,6 +322,16 @@ export class RealtimeServer {
     this.#subscribers.clear()
   }
 
+  /** Test helper: live SSE/in-process subscriber count. */
+  getSubscriberCount(): number {
+    return this.#subscribers.size
+  }
+
+  /** Test helper: active presence lease count. */
+  getPresenceSessionCount(): number {
+    return this.presence.size
+  }
+
   #summaryForNote(
     note: Note,
     head?: { readonly versionId: VersionId; readonly revision: number },

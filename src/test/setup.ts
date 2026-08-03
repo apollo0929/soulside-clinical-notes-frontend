@@ -7,7 +7,7 @@ import { afterEach } from 'vitest'
 import { resetConnectivityServiceForTests } from '@/services/offline/connectivity'
 import { resetOfflineBootstrapForTests } from '@/services/offline/offline-bootstrap'
 import { clearOfflineDatabaseContents } from '@/services/offline/offline-db'
-import { resetRealtimeBootstrapForTests } from '@/services/realtime/realtime-bootstrap'
+import { resetRealtimeEnvironmentForTests } from '@/services/realtime/realtime-bootstrap'
 import { resetTelemetryBootstrapForTests } from '@/services/telemetry/telemetry-bootstrap'
 import { clearTestQueryClients } from '@/test/helpers/queryClient'
 
@@ -15,7 +15,7 @@ afterEach(async () => {
   cleanup()
   clearTestQueryClients()
   resetTelemetryBootstrapForTests()
-  resetRealtimeBootstrapForTests()
+  resetRealtimeEnvironmentForTests()
   resetOfflineBootstrapForTests()
   resetConnectivityServiceForTests()
   // Clear tables without closing/deleting the DB — closing races in-flight Dexie ops

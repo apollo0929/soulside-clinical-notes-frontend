@@ -14,4 +14,6 @@ export type RealtimeTransportConnectOptions = {
 
 export interface RealtimeTransport {
   connect(options: RealtimeTransportConnectOptions): Promise<void> | void
+  /** Optional hard close for EventSource / mock streams. */
+  disconnect?(): void
 }

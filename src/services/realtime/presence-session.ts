@@ -1,6 +1,6 @@
 import { parseSessionId, type SessionId } from '@/domain/ids'
 
-const STORAGE_KEY = 'soulside.presence.sessionId'
+export const PRESENCE_SESSION_STORAGE_KEY = 'soulside.presence.sessionId'
 
 /**
  * Stable per-tab presence session id. sessionStorage survives reloads in the same tab;
@@ -8,7 +8,7 @@ const STORAGE_KEY = 'soulside.presence.sessionId'
  */
 export function getOrCreatePresenceSessionId(): SessionId {
   if (typeof sessionStorage !== 'undefined') {
-    const existing = sessionStorage.getItem(STORAGE_KEY)
+    const existing = sessionStorage.getItem(PRESENCE_SESSION_STORAGE_KEY)
     if (existing) {
       try {
         return parseSessionId(existing)
@@ -23,9 +23,17 @@ export function getOrCreatePresenceSessionId(): SessionId {
       : `prs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
   const sessionId = parseSessionId(value)
   try {
-    sessionStorage?.setItem(STORAGE_KEY, value)
+    sessionStorage?.setItem(PRESENCE_SESSION_STORAGE_KEY, value)
   } catch {
     // private mode / unavailable
   }
   return sessionId
+}
+
+export function clearPresenceSessionIdForTests(): void {
+  try {
+    sessionStorage?.removeItem(PRESENCE_SESSION_STORAGE_KEY)
+  } catch {
+    // private mode / unavailable
+  }
 }

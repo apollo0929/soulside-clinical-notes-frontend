@@ -8,7 +8,11 @@ import type { NotesInfiniteData } from '@/features/notes-list/notes-list-cache'
 import { notesKeys } from '@/features/notes-list/notes-query-keys'
 import { getActiveMockRealtimeServer } from '@/mock/realtime/active-server'
 import { getActorHeaders, getActorIdentity } from '@/services/api/actor-provider'
-import { ConnectivityService, getConnectivityService } from '@/services/offline/connectivity'
+import {
+  ConnectivityService,
+  getConnectivityService,
+  resetConnectivityServiceForTests,
+} from '@/services/offline/connectivity'
 import { persistNoteDetailToOfflineCache } from '@/services/offline/offline-bootstrap'
 import { InProcessRealtimeTransport } from '@/services/realtime/in-process-transport'
 import { SseRealtimeTransport } from '@/services/realtime/mock-sse-transport'
@@ -20,7 +24,10 @@ import {
   resetMutationCorrelationForTests,
 } from '@/services/realtime/mutation-correlation'
 import { isPresenceEvent, PresenceStore } from '@/services/realtime/presence'
-import { getOrCreatePresenceSessionId } from '@/services/realtime/presence-session'
+import {
+  clearPresenceSessionIdForTests,
+  getOrCreatePresenceSessionId,
+} from '@/services/realtime/presence-session'
 import {
   clearPersistedLastEventId,
   createRealtimeCoordinator,
@@ -59,12 +66,21 @@ function notifyCoordinatorReady(): void {
 
 export function subscribeRealtimeCoordinatorReady(listener: () => void): () => void {
   coordinatorReadyListeners.add(listener)
-  if (activeCoordinator) {
-    queueMicrotask(() => listener())
+  if (activeCoordinator && !activeCoordinator.isDisposed()) {
+    queueMicrotask(() => {
+      if (activeCoordinator && !activeCoordinator.isDisposed()) {
+        listener()
+      }
+    })
   }
   return () => {
     coordinatorReadyListeners.delete(listener)
   }
+}
+
+/** Test helper: current ready-listener count (detects listener leaks across resets). */
+export function getRealtimeCoordinatorReadyListenerCountForTests(): number {
+  return coordinatorReadyListeners.size
 }
 
 function resolveTransport(deps: RealtimeBootstrapDeps): RealtimeTransport {
@@ -282,6 +298,9 @@ export function ensureRealtimeBootstrap(
 }
 
 export function getActiveRealtimeCoordinator(): RealtimeCoordinator | null {
+  if (activeCoordinator?.isDisposed()) {
+    return null
+  }
   return activeCoordinator
 }
 
@@ -291,15 +310,47 @@ export function getActivePresenceStore(): PresenceStore | null {
 
 export { rememberLocalMutation as registerLocalMutation }
 
+/**
+ * Dispose the app-scoped realtime coordinator and clear bootstrap latches.
+ * Does not return a disposed coordinator as "ready".
+ */
 export function resetRealtimeBootstrapForTests(): void {
   bootstrapEpoch += 1
-  activeCoordinator?.dispose()
+  const previous = activeCoordinator
   activeCoordinator = null
   activePresence = null
   bootstrapPromise = null
+  previous?.dispose()
   resetMutationCorrelationForTests()
   clearPersistedLastEventId()
+  // Wake listeners so UI unbinds the disposed instance, then drop them so resets
+  // do not accumulate subscribeRealtimeCoordinatorReady callbacks.
   notifyCoordinatorReady()
+  coordinatorReadyListeners.clear()
+}
+
+/**
+ * Full test isolation reset for realtime + related singletons.
+ * Safe to call from Playwright via `__SOULSIDE_REALTIME__.resetEnvironment`.
+ */
+export function resetRealtimeEnvironmentForTests(): void {
+  resetRealtimeBootstrapForTests()
+
+  const server = getActiveMockRealtimeServer()
+  server?.clearForTests()
+
+  resetConnectivityServiceForTests()
+  const connectivity = getConnectivityService()
+  connectivity.start()
+  if (connectivity.getSnapshot().kind !== 'ONLINE') {
+    connectivity.markOnline()
+  }
+
+  try {
+    clearPresenceSessionIdForTests()
+  } catch {
+    // private mode / unavailable
+  }
 }
 
 export function getSharedMutationCorrelationStore(): MutationCorrelationStore {

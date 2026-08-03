@@ -145,6 +145,10 @@ export class PresenceRegistry {
   clear(): void {
     this.#bySession.clear()
   }
+
+  get size(): number {
+    return this.#bySession.size
+  }
 }
 
 function toParticipant(lease: PresenceLease): PresenceParticipantDto {

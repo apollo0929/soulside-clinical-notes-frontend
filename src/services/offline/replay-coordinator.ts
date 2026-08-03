@@ -74,6 +74,7 @@ export class ReplayCoordinator {
   readonly #scheduler: ReplayScheduler
   #running = false
   #disposed = false
+  #followUpReplay = false
   #activeNotes = new Set<NoteId>()
   #inFlight = 0
   #cancelTimers = new Set<() => void>()
@@ -94,11 +95,17 @@ export class ReplayCoordinator {
         void this.replayNow()
       }
     })
+    // Catch up if bootstrap finished after an already-emitted online/reconnect transition.
+    const kind = this.#deps.connectivity.getSnapshot().kind
+    if (kind === 'RECONNECTING' || kind === 'ONLINE' || kind === 'DEGRADED') {
+      void this.replayNow()
+    }
   }
 
   dispose(): void {
     this.#disposed = true
     this.#running = false
+    this.#followUpReplay = false
     this.#unsubscribeOnline?.()
     this.#unsubscribeOnline = null
     for (const cancel of this.#cancelTimers) {
@@ -109,7 +116,11 @@ export class ReplayCoordinator {
   }
 
   async replayNow(): Promise<void> {
-    if (this.#disposed || this.#running) {
+    if (this.#disposed) {
+      return
+    }
+    if (this.#running) {
+      this.#followUpReplay = true
       return
     }
     this.#running = true
@@ -119,6 +130,10 @@ export class ReplayCoordinator {
       await this.#pump()
     } finally {
       this.#running = false
+      if (this.#followUpReplay && !this.#disposed) {
+        this.#followUpReplay = false
+        void this.replayNow()
+      }
     }
   }
 

@@ -22,6 +22,7 @@ const DEFAULT_STREAM_PATH = '/api/realtime/stream'
  */
 export class SseRealtimeTransport implements RealtimeTransport {
   readonly #streamPath: string
+  #activeSource: EventSource | null = null
 
   constructor(options: { readonly streamPath?: string } = {}) {
     this.#streamPath = options.streamPath ?? DEFAULT_STREAM_PATH
@@ -33,6 +34,7 @@ export class SseRealtimeTransport implements RealtimeTransport {
       return
     }
 
+    this.#closeActiveSource()
     options.onStateChange('CONNECTING')
 
     const headers = options.getActorHeaders?.() ?? getActorHeaders()
@@ -52,8 +54,12 @@ export class SseRealtimeTransport implements RealtimeTransport {
     const query = params.toString()
     const url = query.length > 0 ? `${this.#streamPath}?${query}` : this.#streamPath
     const source = new EventSource(url)
+    this.#activeSource = source
 
     const close = () => {
+      if (this.#activeSource === source) {
+        this.#activeSource = null
+      }
       source.close()
       options.onStateChange('DISCONNECTED')
     }
@@ -73,6 +79,9 @@ export class SseRealtimeTransport implements RealtimeTransport {
       }
       // Close so the browser does not auto-recover this EventSource while the
       // coordinator owns reconnect/backoff.
+      if (this.#activeSource === source) {
+        this.#activeSource = null
+      }
       source.close()
       options.onStateChange('RECONNECTING')
     }
@@ -101,15 +110,27 @@ export class SseRealtimeTransport implements RealtimeTransport {
     options.signal.addEventListener(
       'abort',
       () => {
-        source.close()
-        options.onStateChange('DISCONNECTED')
+        close()
       },
       { once: true },
     )
 
     if (options.signal.aborted) {
-      source.close()
-      options.onStateChange('DISCONNECTED')
+      close()
     }
+  }
+
+  /** Close any open EventSource (coordinator dispose / reconnect). */
+  disconnect(): void {
+    this.#closeActiveSource()
+  }
+
+  #closeActiveSource(): void {
+    if (!this.#activeSource) {
+      return
+    }
+    const source = this.#activeSource
+    this.#activeSource = null
+    source.close()
   }
 }

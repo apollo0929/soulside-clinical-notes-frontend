@@ -4,13 +4,23 @@ import type { NoteVersion } from '@/domain/models/note-version'
 import type { MockDatabase } from '@/mock/database/repository'
 import { getActiveMockRealtimeServer } from '@/mock/realtime/active-server'
 import { getActorIdentity } from '@/services/api/actor-provider'
-import { getActiveRealtimeCoordinator } from '@/services/realtime/realtime-bootstrap'
+import {
+  getActiveRealtimeCoordinator,
+  resetRealtimeEnvironmentForTests,
+} from '@/services/realtime/realtime-bootstrap'
 
 export type SoulsideRealtimeApi = {
   simulateRemoteVersionCreated: (input: {
     readonly noteId: string
     readonly bumpRevisionBy?: number
   }) => void
+  /** Test-only: dispose coordinator, clear mock subscribers/presence, reset connectivity. */
+  resetEnvironment: () => void
+  getDiagnostics?: () => {
+    readonly subscriberCount: number
+    readonly presenceSessionCount: number
+    readonly coordinatorDisposed: boolean
+  }
 }
 
 let activeDatabase: MockDatabase | null = null
@@ -76,6 +86,18 @@ export function installDevRealtimeApi(): void {
       })
       if (event) {
         getActiveRealtimeCoordinator()?.injectEvent(event)
+      }
+    },
+    resetEnvironment() {
+      resetRealtimeEnvironmentForTests()
+    },
+    getDiagnostics() {
+      const server = getActiveMockRealtimeServer()
+      const coordinator = getActiveRealtimeCoordinator()
+      return {
+        subscriberCount: server?.getSubscriberCount() ?? 0,
+        presenceSessionCount: server?.getPresenceSessionCount() ?? 0,
+        coordinatorDisposed: coordinator === null,
       }
     },
   }

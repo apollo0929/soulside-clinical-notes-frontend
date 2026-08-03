@@ -1,5 +1,8 @@
 import { expect, type Page, test } from '@playwright/test'
 
+const LAST_EVENT_ID_STORAGE_KEY = 'soulside.realtime.lastEventId'
+const PRESENCE_SESSION_STORAGE_KEY = 'soulside.presence.sessionId'
+
 async function installAdminActor(page: Page) {
   await page.addInitScript(() => {
     const install = () => {
@@ -25,6 +28,20 @@ async function installAdminActor(page: Page) {
       }, 10)
     }
   })
+}
+
+async function clearRealtimeSessionStorage(page: Page) {
+  await page.addInitScript(
+    ({ lastEventIdKey, presenceKey }) => {
+      try {
+        sessionStorage.removeItem(lastEventIdKey)
+        sessionStorage.removeItem(presenceKey)
+      } catch {
+        // private mode / unavailable
+      }
+    },
+    { lastEventIdKey: LAST_EVENT_ID_STORAGE_KEY, presenceKey: PRESENCE_SESSION_STORAGE_KEY },
+  )
 }
 
 async function ensureAdminActor(page: Page) {
@@ -53,13 +70,42 @@ async function ensureAdminActor(page: Page) {
   })
 }
 
+async function resetRealtimeEnvironment(page: Page) {
+  await page
+    .evaluate(() => {
+      const api = (
+        globalThis as {
+          __SOULSIDE_REALTIME__?: { resetEnvironment?: () => void }
+        }
+      ).__SOULSIDE_REALTIME__
+      api?.resetEnvironment?.()
+      try {
+        sessionStorage.removeItem('soulside.realtime.lastEventId')
+        sessionStorage.removeItem('soulside.presence.sessionId')
+      } catch {
+        // private mode / unavailable
+      }
+    })
+    .catch(() => {
+      // Page may already be closed after a failed test.
+    })
+}
+
+test.beforeEach(async ({ page }) => {
+  await clearRealtimeSessionStorage(page)
+  await installAdminActor(page)
+})
+
+test.afterEach(async ({ page }) => {
+  await resetRealtimeEnvironment(page)
+})
+
 /**
  * Cross-tab MSW backends are isolated. This flow validates presence UI, DEV remote
  * version simulation, and dirty-editor protection on a single page.
  */
 test('realtime remote version simulation preserves dirty draft', async ({ page }) => {
   test.setTimeout(90_000)
-  await installAdminActor(page)
   await page.goto('/notes')
   await ensureAdminActor(page)
   await page.getByRole('checkbox', { name: 'IN REVIEW' }).click()
@@ -110,10 +156,16 @@ test('realtime remote version simulation preserves dirty draft', async ({ page }
 })
 
 test('connectivity banner exposes realtime status text', async ({ page }) => {
-  await installAdminActor(page)
   await page.goto('/notes')
   await ensureAdminActor(page)
   await expect(page.getByRole('heading', { level: 1, name: 'Clinical notes' })).toBeVisible()
+
+  await page.waitForFunction(() => {
+    return Boolean(
+      (globalThis as { __SOULSIDE_REALTIME__?: { resetEnvironment: unknown } })
+        .__SOULSIDE_REALTIME__?.resetEnvironment,
+    )
+  })
 
   await page.evaluate(() => {
     window.dispatchEvent(new Event('offline'))

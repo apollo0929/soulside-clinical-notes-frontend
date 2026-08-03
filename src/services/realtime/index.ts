@@ -19,21 +19,28 @@ export {
   type PresenceSummary,
   summarizePresence,
 } from '@/services/realtime/presence'
-export { getOrCreatePresenceSessionId } from '@/services/realtime/presence-session'
+export {
+  clearPresenceSessionIdForTests,
+  getOrCreatePresenceSessionId,
+  PRESENCE_SESSION_STORAGE_KEY,
+} from '@/services/realtime/presence-session'
 export {
   ensureRealtimeBootstrap,
   getActivePresenceStore,
   getActiveRealtimeCoordinator,
+  getRealtimeCoordinatorReadyListenerCountForTests,
   getSharedMutationCorrelationStore,
   type RealtimeBootstrapDeps,
   reconcileRealtimeEvent,
   registerLocalMutation,
   resetRealtimeBootstrapForTests,
+  resetRealtimeEnvironmentForTests,
   subscribeRealtimeCoordinatorReady,
 } from '@/services/realtime/realtime-bootstrap'
 export {
   clearPersistedLastEventId,
   createRealtimeCoordinator,
+  LAST_EVENT_ID_STORAGE_KEY,
   REALTIME_BACKOFF_MS,
   RealtimeCoordinator,
   type RealtimeCoordinatorDeps,

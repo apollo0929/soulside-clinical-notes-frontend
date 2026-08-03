@@ -12,7 +12,7 @@ export const REALTIME_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 30_000] as const
 
 export const RECENT_EVENT_ID_CAPACITY = 256
 
-const LAST_EVENT_ID_STORAGE_KEY = 'soulside.realtime.lastEventId'
+export const LAST_EVENT_ID_STORAGE_KEY = 'soulside.realtime.lastEventId'
 
 function readPersistedLastEventId(): RealtimeEventId | null {
   try {
@@ -161,10 +161,22 @@ export class RealtimeCoordinator {
     this.#disconnectTransport()
     this.#connectionListeners.clear()
     this.#recentEvents.clear()
+    // Drop any queued handler work; disposed checks bail out of #processEvent.
+    this.#processing = Promise.resolve()
   }
 
   getConnectionState(): RealtimeConnectionState {
     return this.#connectionState
+  }
+
+  /** Test helper: true after dispose(). */
+  isDisposed(): boolean {
+    return this.#disposed
+  }
+
+  /** Test helper: whether a reconnect/backoff timer is armed. */
+  hasPendingReconnectTimer(): boolean {
+    return this.#reconnectTimer !== null
   }
 
   subscribeConnectionState(listener: (state: RealtimeConnectionState) => void): () => void {
@@ -261,6 +273,7 @@ export class RealtimeCoordinator {
   #disconnectTransport(resetAttempt = true): void {
     this.#connectAbort?.abort()
     this.#connectAbort = null
+    this.#deps.transport.disconnect?.()
     if (resetAttempt) {
       this.#connectAttempt = 0
     }
