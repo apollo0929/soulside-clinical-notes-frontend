@@ -2,7 +2,13 @@ import type { RealtimeEventId } from '@/domain/ids'
 import { type RealtimeEventDto, realtimeEventDtoSchema } from '@/domain/schemas/realtime'
 
 export type RealtimeConnectionState =
-  'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'RESYNCING' | 'DEGRADED'
+  | 'DISCONNECTED'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'RECONNECTING'
+  | 'RESYNCING'
+  | 'DEGRADED'
+  | 'UNAVAILABLE'
 
 export { type RealtimeEventDto, realtimeEventDtoSchema }
 

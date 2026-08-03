@@ -43,6 +43,11 @@ export {
 export { createMockBackendBrowserWorker } from '@/mock/msw/browser'
 export { createMockBackendHandlers } from '@/mock/msw/handlers'
 export { createMockBackendNodeServer } from '@/mock/msw/node'
+export {
+  createDevUnhandledRequestHandler,
+  handleDevUnhandledRequest,
+  shouldSilentlyBypassUnhandledRequest,
+} from '@/mock/msw/unhandled-request'
 export { createMulberry32, type DeterministicRandom } from '@/mock/prng'
 export {
   createSeedConfig,

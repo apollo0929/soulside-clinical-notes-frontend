@@ -125,6 +125,10 @@ export class RealtimeCoordinator {
   #reconnectTimer: (() => void) | null = null
   #connectivityUnsubscribe: (() => void) | null = null
   #processing = Promise.resolve()
+  /** Once set, do not auto-reconnect (non-retryable stream failure). */
+  #terminalUnavailable = false
+  /** Last observed connectivity kind — queue-summary notifications reuse the same kind. */
+  #lastConnectivityKind: string | null = null
 
   constructor(deps: RealtimeCoordinatorDeps) {
     this.#deps = deps
@@ -136,18 +140,41 @@ export class RealtimeCoordinator {
     if (this.#disposed || this.#connectivityUnsubscribe) {
       return
     }
+    this.#lastConnectivityKind = this.#deps.connectivity.getSnapshot().kind
     this.#connectivityUnsubscribe = this.#deps.connectivity.subscribe((state) => {
-      if (state.kind === 'OFFLINE') {
-        this.#disconnectTransport()
-        return
-      }
-      if (state.kind === 'ONLINE' || state.kind === 'RECONNECTING' || state.kind === 'DEGRADED') {
-        this.#scheduleConnect(0)
-      }
+      this.#onConnectivityChange(state.kind)
     })
 
-    const snapshot = this.#deps.connectivity.getSnapshot()
-    if (snapshot.kind !== 'OFFLINE') {
+    if (this.#lastConnectivityKind !== 'OFFLINE') {
+      this.#scheduleConnect(0)
+    }
+  }
+
+  #onConnectivityChange(kind: string): void {
+    if (this.#disposed || this.#terminalUnavailable) {
+      return
+    }
+    const previous = this.#lastConnectivityKind
+    this.#lastConnectivityKind = kind
+
+    if (kind === 'OFFLINE') {
+      this.#disconnectTransport()
+      return
+    }
+
+    // ConnectivityService also notifies listeners on queue-summary changes without
+    // changing kind. Only reconnect on a real transition away from OFFLINE / into
+    // RECONNECTING — never abort a healthy stream on every summary tick.
+    if (previous === kind) {
+      return
+    }
+
+    if (
+      previous === 'OFFLINE' ||
+      kind === 'RECONNECTING' ||
+      (previous === null && kind !== 'OFFLINE')
+    ) {
+      this.#connectAttempt = 0
       this.#scheduleConnect(0)
     }
   }
@@ -213,7 +240,7 @@ export class RealtimeCoordinator {
   }
 
   #scheduleConnect(delayMs: number): void {
-    if (this.#disposed) {
+    if (this.#disposed || this.#terminalUnavailable) {
       return
     }
     this.#reconnectTimer?.()
@@ -224,7 +251,11 @@ export class RealtimeCoordinator {
   }
 
   #openTransport(): void {
-    if (this.#disposed || this.#deps.connectivity.getSnapshot().kind === 'OFFLINE') {
+    if (
+      this.#disposed ||
+      this.#terminalUnavailable ||
+      this.#deps.connectivity.getSnapshot().kind === 'OFFLINE'
+    ) {
       return
     }
 
@@ -243,13 +274,25 @@ export class RealtimeCoordinator {
           if (abort.signal.aborted || this.#disposed) {
             return
           }
+          if (state === 'UNAVAILABLE') {
+            this.#enterUnavailable()
+            return
+          }
           this.#setConnectionState(state)
           if (state === 'CONNECTED') {
             this.#connectAttempt = 0
           }
-          if (state === 'RECONNECTING' && !this.#disposed) {
+          if (state === 'RECONNECTING' && !this.#disposed && !this.#terminalUnavailable) {
             this.#connectAttempt += 1
             this.#scheduleReconnect()
+          }
+        },
+        onFailure: (failure) => {
+          if (abort.signal.aborted || this.#disposed) {
+            return
+          }
+          if (failure.kind === 'non_retryable') {
+            this.#enterUnavailable()
           }
         },
         onEvent: (raw) => {
@@ -262,8 +305,22 @@ export class RealtimeCoordinator {
     }
   }
 
+  #enterUnavailable(): void {
+    this.#terminalUnavailable = true
+    this.#reconnectTimer?.()
+    this.#reconnectTimer = null
+    this.#connectAbort?.abort()
+    this.#connectAbort = null
+    this.#deps.transport.disconnect?.()
+    this.#setConnectionState('UNAVAILABLE')
+  }
+
   #scheduleReconnect(): void {
-    if (this.#disposed || this.#deps.connectivity.getSnapshot().kind === 'OFFLINE') {
+    if (
+      this.#disposed ||
+      this.#terminalUnavailable ||
+      this.#deps.connectivity.getSnapshot().kind === 'OFFLINE'
+    ) {
       return
     }
     const delay = backoffDelay(this.#connectAttempt - 1)
@@ -277,7 +334,9 @@ export class RealtimeCoordinator {
     if (resetAttempt) {
       this.#connectAttempt = 0
     }
-    this.#setConnectionState('DISCONNECTED')
+    if (!this.#terminalUnavailable) {
+      this.#setConnectionState('DISCONNECTED')
+    }
   }
 
   #enqueueEvent(raw: RealtimeEventDto): void {

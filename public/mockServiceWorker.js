@@ -91,9 +91,26 @@ addEventListener('message', async function (event) {
 addEventListener('fetch', function (event) {
   const requestInterceptedAt = Date.now()
 
-  // Bypass navigation requests.
-  if (event.request.mode === 'navigate') {
+  // Bypass navigation and document requests so SPA route loads never go through
+  // MSW passthrough (which fails hard if Vite is briefly unavailable).
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
     return
+  }
+
+  // Bypass Vite HMR / toolchain URLs at the worker boundary as well.
+  try {
+    const url = new URL(event.request.url)
+    if (
+      url.pathname.startsWith('/@vite/') ||
+      url.pathname.startsWith('/@fs/') ||
+      url.pathname.startsWith('/@id/') ||
+      url.pathname.startsWith('/@react-refresh') ||
+      url.pathname === '/favicon.ico'
+    ) {
+      return
+    }
+  } catch {
+    // Fall through to normal handling when URL parsing fails.
   }
 
   // Opening the DevTools triggers the "only-if-cached" request

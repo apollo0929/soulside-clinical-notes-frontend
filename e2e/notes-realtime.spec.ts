@@ -179,7 +179,7 @@ test('connectivity banner exposes realtime status text', async ({ page }) => {
     .poll(
       async () => {
         const banner = page.getByTestId('connectivity-banner')
-        if (!(await banner.count())) {
+        if (!(await banner.count()) || (await banner.getAttribute('data-visible')) === 'false') {
           return 'hidden-online'
         }
         return (await banner.textContent()) ?? ''

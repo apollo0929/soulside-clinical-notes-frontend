@@ -53,6 +53,8 @@ function realtimeBannerMessage(state: RealtimeConnectionState): string | null {
       return 'Resynchronizing…'
     case 'DEGRADED':
       return 'Live updates unavailable; data may be stale'
+    case 'UNAVAILABLE':
+      return 'Live updates unavailable.'
     case 'DISCONNECTED':
       return null
     default: {
@@ -81,6 +83,7 @@ function shouldShowBanner(
     realtimeState === 'RECONNECTING' ||
     realtimeState === 'RESYNCING' ||
     realtimeState === 'DEGRADED' ||
+    realtimeState === 'UNAVAILABLE' ||
     realtimeState === 'CONNECTING'
   ) {
     return true
@@ -154,10 +157,6 @@ export function ConnectivityBanner({ connectivity }: ConnectivityBannerProps) {
     return () => globalThis.clearTimeout(timer)
   }, [syncedFlash])
 
-  if (!shouldShowBanner(state, summary, syncedFlash, realtimeState)) {
-    return null
-  }
-
   const offlineMessage =
     syncedFlash && state.kind === 'ONLINE'
       ? 'All queued changes synchronized.'
@@ -187,16 +186,22 @@ export function ConnectivityBanner({ connectivity }: ConnectivityBannerProps) {
       ? realtimeState === 'RECONNECTING' ||
         realtimeState === 'RESYNCING' ||
         realtimeState === 'DEGRADED' ||
+        realtimeState === 'UNAVAILABLE' ||
         realtimeState === 'CONNECTED'
         ? realtimeText
         : null
       : null
 
+  const visible = shouldShowBanner(state, summary, syncedFlash, realtimeState)
+
+  // Keep a stable DOM node so CONNECTING/RECONNECTING/UNAVAILABLE updates do not remount.
   return (
     <section
-      className="connectivity-banner"
+      className={visible ? 'connectivity-banner' : 'connectivity-banner connectivity-banner--idle'}
       aria-labelledby={headingId}
       data-testid="connectivity-banner"
+      data-visible={visible ? 'true' : 'false'}
+      hidden={!visible}
     >
       <h2 id={headingId} className="visually-hidden">
         Connectivity status

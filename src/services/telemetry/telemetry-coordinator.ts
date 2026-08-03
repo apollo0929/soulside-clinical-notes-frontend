@@ -70,7 +70,9 @@ function isTransientDeliveryError(error: unknown): boolean {
 
 function isFatalDeliveryError(error: unknown): boolean {
   if (isApiClientError(error)) {
-    return error.status === 400 || error.status === 403
+    return (
+      error.status === 400 || error.status === 401 || error.status === 403 || error.status === 404
+    )
   }
   return false
 }

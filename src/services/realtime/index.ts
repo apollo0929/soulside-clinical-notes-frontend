@@ -56,6 +56,14 @@ export {
   reportMalformedRealtimeEvent,
 } from '@/services/realtime/realtime-events'
 export {
+  classifyRealtimeContentTypeFailure,
+  classifyRealtimeHttpFailure,
+  classifyRealtimeHttpStatus,
+  classifyRealtimeNetworkError,
+  type RealtimeConnectionFailure,
+  type RealtimeFailureKind,
+} from '@/services/realtime/realtime-failure'
+export {
   applyNoteSummaryToListCache,
   applyStatusOrReviewerToDetail,
   applyVersionCreatedToDetail,

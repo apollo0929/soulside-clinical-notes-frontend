@@ -125,6 +125,52 @@ describe('RealtimeCoordinator', () => {
     connectivity.stop()
   })
 
+  it('queue-summary notifications do not abort a live stream', () => {
+    const connectivity = new ConnectivityService({
+      getNavigatorOnline: () => true,
+      addWindowListener: () => () => undefined,
+    })
+    connectivity.start()
+
+    let connectCount = 0
+    const transport = {
+      connect(options: RealtimeTransportConnectOptions) {
+        connectCount += 1
+        options.onStateChange('CONNECTED')
+      },
+    }
+
+    const scheduled: Array<() => void> = []
+    const coordinator = createRealtimeCoordinator({
+      transport,
+      connectivity,
+      scheduler: {
+        schedule(_delay, work) {
+          scheduled.push(work)
+          return () => undefined
+        },
+      },
+      handlers: {
+        onReconcile: () => undefined,
+        onPresence: () => undefined,
+        onResync: () => undefined,
+      },
+    })
+
+    coordinator.start()
+    scheduled.shift()?.()
+    expect(connectCount).toBe(1)
+
+    connectivity.setQueueSummary({ queued: 1, conflicts: 0, failed: 0 })
+    connectivity.setQueueSummary({ queued: 2, conflicts: 0, failed: 0 })
+    expect(scheduled.length).toBe(0)
+    expect(connectCount).toBe(1)
+    expect(coordinator.getConnectionState()).toBe('CONNECTED')
+
+    coordinator.dispose()
+    connectivity.stop()
+  })
+
   it('43–45: in-process transport delivers events via connect callback', async () => {
     const connectivity = new ConnectivityService({
       getNavigatorOnline: () => true,

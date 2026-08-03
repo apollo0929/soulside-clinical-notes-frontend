@@ -334,4 +334,59 @@ describe('TelemetryCoordinator', () => {
     await coordinator.dispose()
     connectivity.stop()
   })
+
+  it('404 is fatal: drops batch without infinite retry loop', async () => {
+    const connectivity = new ConnectivityService({
+      getNavigatorOnline: () => true,
+      addWindowListener: () => () => undefined,
+    })
+    connectivity.start()
+    const repo = memoryRepo()
+    let attempts = 0
+    const { ApiClientError } = await import('@/services/api/api-errors')
+    const transport: TelemetryTransport = {
+      async sendBatch() {
+        attempts += 1
+        throw new ApiClientError({
+          status: 404,
+          code: 'TELEMETRY_DELIVERY_FAILED',
+          message: 'not found',
+        })
+      },
+    }
+    const batchIds = createSequentialTelemetryBatchIdGenerator('tel_bat_404')
+    const coordinator = createTelemetryCoordinator({
+      transport,
+      repository: repo,
+      connectivity,
+      scheduler: {
+        schedule(_delay, work) {
+          work()
+          return () => undefined
+        },
+        interval() {
+          return () => undefined
+        },
+      },
+      batchSize: 1,
+      maxDeliveryAttempts: 5,
+      nextBatchId: () => batchIds.next(),
+      now: () => parseIsoDateTime('2024-07-01T00:00:00.000Z'),
+    })
+    coordinator.track(
+      createAutosaveSucceededEvent(factoryCtx(), {
+        revision: 1,
+        durationBucket: 'LT_250_MS',
+      }),
+    )
+    await coordinator.flush('manual')
+    expect(attempts).toBe(1)
+    expect(repo.rows.size).toBe(0)
+    expect(coordinator.getDroppedEventCount()).toBeGreaterThan(0)
+
+    await coordinator.flush('manual')
+    expect(attempts).toBe(1)
+    await coordinator.dispose()
+    connectivity.stop()
+  })
 })

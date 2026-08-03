@@ -24,6 +24,7 @@ export type SoulsideRealtimeApi = {
 }
 
 let activeDatabase: MockDatabase | null = null
+let resetEnvironmentInvocationCount = 0
 
 /** Called from mock backend bootstrap so DEV tools can synthesize remote events. */
 export function registerRealtimeDevDatabase(database: MockDatabase): void {
@@ -32,6 +33,15 @@ export function registerRealtimeDevDatabase(database: MockDatabase): void {
 
 export function resetRealtimeDevDatabaseForTests(): void {
   activeDatabase = null
+}
+
+/** Test helper: how many times resetEnvironment was explicitly invoked. */
+export function getDevRealtimeResetInvocationCountForTests(): number {
+  return resetEnvironmentInvocationCount
+}
+
+export function resetDevRealtimeResetInvocationCountForTests(): void {
+  resetEnvironmentInvocationCount = 0
 }
 
 /**
@@ -88,7 +98,9 @@ export function installDevRealtimeApi(): void {
         getActiveRealtimeCoordinator()?.injectEvent(event)
       }
     },
+    // Explicit opt-in only — never invoked by installDevRealtimeApi / app boot.
     resetEnvironment() {
+      resetEnvironmentInvocationCount += 1
       resetRealtimeEnvironmentForTests()
     },
     getDiagnostics() {
