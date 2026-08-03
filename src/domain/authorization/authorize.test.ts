@@ -84,7 +84,7 @@ describe('role-level access', () => {
     })
   })
 
-  it('CLINICIAN cannot assign reviewer', () => {
+  it('CLINICIAN cannot assign reviewer but can bulk regenerate', () => {
     expect(
       decide({
         permission: 'NOTE_ASSIGN_REVIEWER',
@@ -94,9 +94,17 @@ describe('role-level access', () => {
       allowed: false,
       reasonCode: 'ROLE_NOT_PERMITTED',
     })
+
+    expect(
+      decide({
+        permission: 'NOTE_BULK_REGENERATE',
+        actor: buildAuthorizationActor({ role: 'CLINICIAN' }),
+        resource: null,
+      }).allowed,
+    ).toBe(true)
   })
 
-  it('REVIEWER cannot perform bulk assignment', () => {
+  it('REVIEWER cannot perform bulk assignment or bulk regeneration', () => {
     expect(
       decide({
         permission: 'NOTE_BULK_ASSIGN_REVIEWER',
@@ -107,15 +115,27 @@ describe('role-level access', () => {
       allowed: false,
       reasonCode: 'ROLE_NOT_PERMITTED',
     })
+
+    expect(
+      decide({
+        permission: 'NOTE_BULK_REGENERATE',
+        actor: buildAuthorizationActor({ role: 'REVIEWER' }),
+        resource: null,
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reasonCode: 'ROLE_NOT_PERMITTED',
+    })
   })
 
-  it('ADMIN can assign reviewer, bulk assign, and control simulation', () => {
+  it('ADMIN can assign reviewer, bulk assign, bulk regenerate, and control simulation', () => {
     const actor = buildAuthorizationActor({ role: 'ADMIN', userId: parseUserId('usr_admin') })
 
     expect(decide({ permission: 'NOTE_ASSIGN_REVIEWER', actor }).allowed).toBe(true)
     expect(decide({ permission: 'NOTE_BULK_ASSIGN_REVIEWER', actor, resource: null }).allowed).toBe(
       true,
     )
+    expect(decide({ permission: 'NOTE_BULK_REGENERATE', actor, resource: null }).allowed).toBe(true)
     expect(decide({ permission: 'ADMIN_SIMULATION_CONTROL', actor, resource: null }).allowed).toBe(
       true,
     )

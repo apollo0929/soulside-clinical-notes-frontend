@@ -8,7 +8,7 @@ import { MockDatabase } from '@/mock/database/repository'
 import { seedMockDatabase } from '@/mock/seed/seed'
 import { bulkAssignReviewer, MAX_BULK_ASSIGN_SIZE } from '@/mock/services/bulk-assign-reviewer'
 import { bulkRegenerateNotes, MAX_BULK_REGENERATE_SIZE } from '@/mock/services/bulk-regenerate'
-import { adminActor, clinicianActor, reviewerActor } from '@/mock/test/helpers'
+import { adminActor, auditorActor, clinicianActor, reviewerActor } from '@/mock/test/helpers'
 
 const OCCURRED_AT = parseIsoDateTime('2024-11-15T10:00:00.000Z')
 
@@ -390,12 +390,90 @@ describe('bulkRegenerateNotes', () => {
     expect(db.listReviewEvents(note.id)).toHaveLength(beforeEvents)
   })
 
-  it('18: unauthorized regeneration fails at request level', () => {
+  it('18: REVIEWER regeneration denied at request level', () => {
     const note = noteByStatus(db, 'FAILED')
     const result = bulkRegenerateNotes(db, {
       actor: reviewerActor(db),
       noteIds: [note.id],
       clientMutationId: parseClientMutationId('mut_regen_unauthorized'),
+      occurredAt: clock.now(),
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN')
+      expect(result.error.status).toBe(403)
+    }
+    expect(db.getNote(note.id)?.status).toBe('FAILED')
+  })
+
+  it('CLINICIAN FAILED regeneration succeeds for owned note', () => {
+    const actor = clinicianActor(db)
+    const ownedFailed = db.listNotes().find((n) => {
+      if (n.status !== 'FAILED') {
+        return false
+      }
+      const firstVersion = [...db.listVersionsForNote(n.id)].sort(
+        (a, b) => a.revisionNumber - b.revisionNumber,
+      )[0]
+      return firstVersion?.authorId === actor.userId
+    })
+    if (!ownedFailed) {
+      return
+    }
+    const beforeEvents = db.listReviewEvents(ownedFailed.id).length
+    const result = bulkRegenerateNotes(db, {
+      actor,
+      noteIds: [ownedFailed.id],
+      clientMutationId: parseClientMutationId('mut_regen_clinician_ok'),
+      occurredAt: clock.now(),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) {
+      return
+    }
+    const item = result.response.results[0]!
+    expect(item.success).toBe(true)
+    if (item.success) {
+      expect(item.note.status).toBe('GENERATING')
+    }
+    expect(db.getNote(ownedFailed.id)?.status).toBe('GENERATING')
+    expect(db.listReviewEvents(ownedFailed.id)).toHaveLength(beforeEvents + 1)
+  })
+
+  it('CLINICIAN FAILED regeneration fails per-item for non-owned note', () => {
+    const actor = clinicianActor(db)
+    const nonOwnedFailed = db.listNotes().find((n) => {
+      if (n.status !== 'FAILED') {
+        return false
+      }
+      const firstVersion = [...db.listVersionsForNote(n.id)].sort(
+        (a, b) => a.revisionNumber - b.revisionNumber,
+      )[0]
+      return firstVersion?.authorId !== actor.userId
+    })
+    if (!nonOwnedFailed) {
+      return
+    }
+    const result = bulkRegenerateNotes(db, {
+      actor,
+      noteIds: [nonOwnedFailed.id],
+      clientMutationId: parseClientMutationId('mut_regen_clinician_unowned'),
+      occurredAt: clock.now(),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) {
+      return
+    }
+    expect(result.response.results[0]?.success).toBe(false)
+    expect(db.getNote(nonOwnedFailed.id)?.status).toBe('FAILED')
+  })
+
+  it('READONLY_AUDITOR regeneration denied at request level', () => {
+    const note = noteByStatus(db, 'FAILED')
+    const result = bulkRegenerateNotes(db, {
+      actor: auditorActor(db),
+      noteIds: [note.id],
+      clientMutationId: parseClientMutationId('mut_regen_auditor_denied'),
       occurredAt: clock.now(),
     })
     expect(result.ok).toBe(false)

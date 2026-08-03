@@ -8,7 +8,7 @@ import {
 import { ACTOR_USER_ID_HEADER, ACTOR_USER_ROLE_HEADER } from '@/mock/msw/actor-headers'
 import { createMockBackendNodeServer } from '@/mock/msw/node'
 import { seedMockDatabase } from '@/mock/seed/seed'
-import { adminActor, reviewerActor } from '@/mock/test/helpers'
+import { adminActor, auditorActor, clinicianActor, reviewerActor } from '@/mock/test/helpers'
 
 describe('MSW bulk-actions integration', () => {
   const { backend, server } = createMockBackendNodeServer()
@@ -127,6 +127,41 @@ describe('MSW bulk-actions integration', () => {
     expect(body.error.code).toBe('FORBIDDEN')
   })
 
+  it('POST /api/notes/bulk/regenerate CLINICIAN succeeds for owned FAILED note', async () => {
+    const clinician = clinicianActor(backend.database)
+    const ownedFailed = backend.database.listNotes().find((n) => {
+      if (n.status !== 'FAILED') {
+        return false
+      }
+      const firstVersion = [...backend.database.listVersionsForNote(n.id)].sort(
+        (a, b) => a.revisionNumber - b.revisionNumber,
+      )[0]
+      return firstVersion?.authorId === clinician.userId
+    })
+    if (!ownedFailed) {
+      return
+    }
+
+    const response = await fetch('http://localhost/api/notes/bulk/regenerate', {
+      method: 'POST',
+      headers: headersFor(clinician),
+      body: JSON.stringify({
+        noteIds: [ownedFailed.id],
+        clientMutationId: 'mut_http_regen_clinician_ok',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body: unknown = await response.json()
+    expect(bulkRegenerateResponseDtoSchema.safeParse(body).success).toBe(true)
+    const parsed = bulkRegenerateResponseDtoSchema.parse(body)
+    expect(parsed.results[0]?.success).toBe(true)
+    if (parsed.results[0]?.success) {
+      expect(parsed.results[0].note.status).toBe('GENERATING')
+    }
+    expect(backend.database.getNote(ownedFailed.id)?.status).toBe('GENERATING')
+  })
+
   it('POST regenerate returns 403 for REVIEWER', async () => {
     const reviewer = reviewerActor(backend.database)
     const note = backend.database.listNotes().find((n) => n.status === 'FAILED')
@@ -140,6 +175,27 @@ describe('MSW bulk-actions integration', () => {
       body: JSON.stringify({
         noteIds: [note.id],
         clientMutationId: 'mut_http_regen_forbidden',
+      }),
+    })
+
+    expect(response.status).toBe(403)
+    const body = (await response.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('FORBIDDEN')
+  })
+
+  it('POST regenerate returns 403 for READONLY_AUDITOR', async () => {
+    const auditor = auditorActor(backend.database)
+    const note = backend.database.listNotes().find((n) => n.status === 'FAILED')
+    if (!note) {
+      throw new Error('Expected FAILED note')
+    }
+
+    const response = await fetch('http://localhost/api/notes/bulk/regenerate', {
+      method: 'POST',
+      headers: headersFor(auditor),
+      body: JSON.stringify({
+        noteIds: [note.id],
+        clientMutationId: 'mut_http_regen_auditor_forbidden',
       }),
     })
 

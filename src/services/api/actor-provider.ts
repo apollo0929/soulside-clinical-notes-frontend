@@ -30,6 +30,24 @@ export const DEFAULT_DEV_ADMIN_ACTOR: ActorIdentity = Object.freeze({
   role: 'ADMIN',
 })
 
+/**
+ * First seeded clinician for development actor switching.
+ * ID pattern: usr_clinician_<seed>_<index>
+ */
+export const DEFAULT_DEV_CLINICIAN_ACTOR: ActorIdentity = Object.freeze({
+  userId: `usr_clinician_${DEFAULT_DEV_SEED}_0`,
+  role: 'CLINICIAN',
+})
+
+/**
+ * Seeded read-only auditor for development actor switching.
+ * ID pattern: usr_auditor_<seed>
+ */
+export const DEFAULT_DEV_READONLY_AUDITOR_ACTOR: ActorIdentity = Object.freeze({
+  userId: `usr_auditor_${DEFAULT_DEV_SEED}`,
+  role: 'READONLY_AUDITOR',
+})
+
 let currentActor: ActorIdentity = DEFAULT_DEV_REVIEWER_ACTOR
 
 export function getActorIdentity(): ActorIdentity {
@@ -57,6 +75,8 @@ export type SoulsideActorApi = {
   resetActorIdentity: typeof resetActorIdentity
   DEFAULT_DEV_ADMIN_ACTOR: typeof DEFAULT_DEV_ADMIN_ACTOR
   DEFAULT_DEV_REVIEWER_ACTOR: typeof DEFAULT_DEV_REVIEWER_ACTOR
+  DEFAULT_DEV_CLINICIAN_ACTOR: typeof DEFAULT_DEV_CLINICIAN_ACTOR
+  DEFAULT_DEV_READONLY_AUDITOR_ACTOR: typeof DEFAULT_DEV_READONLY_AUDITOR_ACTOR
 }
 
 export function installDevActorApi(): void {
@@ -69,6 +89,8 @@ export function installDevActorApi(): void {
     resetActorIdentity,
     DEFAULT_DEV_ADMIN_ACTOR,
     DEFAULT_DEV_REVIEWER_ACTOR,
+    DEFAULT_DEV_CLINICIAN_ACTOR,
+    DEFAULT_DEV_READONLY_AUDITOR_ACTOR,
   }
 }
 

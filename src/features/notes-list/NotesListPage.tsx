@@ -211,6 +211,7 @@ export function NotesListPage() {
   const selectedCount = selection.selectedIds.size
   const actor = getActorIdentity()
   const isAdmin = actor.role === 'ADMIN'
+  const isClinician = actor.role === 'CLINICIAN'
 
   const selectedRows = useMemo(
     () => rows.filter((row) => selection.selectedIds.has(row.id)),
@@ -237,8 +238,8 @@ export function NotesListPage() {
   })()
 
   const regenerateDisabledReason = (() => {
-    if (!isAdmin) {
-      return 'Only administrators may request regeneration.'
+    if (!isAdmin && !isClinician) {
+      return 'Only clinicians and administrators may request regeneration.'
     }
     if (selectedCount === 0) {
       return 'Select at least one note.'
@@ -248,7 +249,7 @@ export function NotesListPage() {
     }
     const failedSelected = selectedRows.filter((row) => row.status === 'FAILED')
     if (failedSelected.length === 0) {
-      return 'Select one or more FAILED notes to regenerate.'
+      return 'Regeneration is available only for failed notes.'
     }
     return null
   })()

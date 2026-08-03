@@ -130,7 +130,7 @@ const permissionDefinitions: PermissionDefinition[] = [
     permission: 'NOTE_BULK_REGENERATE',
     resourceRequirement: 'NONE',
     mutates: true,
-    grants: grants(['ADMIN', 'NONE']),
+    grants: grants(['CLINICIAN', 'NONE'], ['ADMIN', 'NONE']),
   },
   {
     permission: 'ADMIN_SIMULATION_CONTROL',

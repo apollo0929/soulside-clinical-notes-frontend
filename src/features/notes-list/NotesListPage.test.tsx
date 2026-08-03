@@ -8,7 +8,12 @@ import { ErrorBoundary } from '@/app/ErrorBoundary'
 import { NotesListPage } from '@/features/notes-list/NotesListPage'
 import { createMockBackendNodeServer } from '@/mock/msw/node'
 import { seedMockDatabase } from '@/mock/seed/seed'
-import { resetActorIdentity } from '@/services/api/actor-provider'
+import {
+  DEFAULT_DEV_ADMIN_ACTOR,
+  DEFAULT_DEV_CLINICIAN_ACTOR,
+  resetActorIdentity,
+  setActorIdentity,
+} from '@/services/api/actor-provider'
 import { createTestQueryClient } from '@/test/helpers/queryClient'
 import { render, renderWithProviders } from '@/test/helpers/render'
 
@@ -398,6 +403,102 @@ describe('NotesListPage', () => {
       const search = screen.getByTestId('location-search').textContent ?? ''
       expect(search).toContain('utm=keep')
       expect(search).not.toContain('status=')
+    })
+  })
+
+  describe('regeneration role gating', () => {
+    it('REVIEWER sees disabled regeneration with correct message', async () => {
+      renderPage('/notes?status=FAILED')
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument()
+      })
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
+      if (noteCheckbox) {
+        fireEvent.click(noteCheckbox)
+      } else {
+        const firstRow = document.querySelector('[data-note-id]')
+        if (firstRow) {
+          fireEvent.click(firstRow)
+        }
+      }
+
+      const toolbar = screen.queryByTestId('bulk-action-toolbar')
+      if (toolbar) {
+        const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+        expect(regenButton).toBeDisabled()
+        expect(
+          screen.getByText('Only clinicians and administrators may request regeneration.'),
+        ).toBeInTheDocument()
+      }
+    })
+
+    it('CLINICIAN sees enabled regeneration for FAILED notes', async () => {
+      setActorIdentity(DEFAULT_DEV_CLINICIAN_ACTOR)
+      renderPage('/notes?status=FAILED')
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument()
+      })
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
+      if (noteCheckbox) {
+        fireEvent.click(noteCheckbox)
+      }
+
+      const toolbar = screen.queryByTestId('bulk-action-toolbar')
+      if (toolbar) {
+        const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+        expect(regenButton).not.toBeDisabled()
+        expect(
+          screen.queryByText('Only clinicians and administrators may request regeneration.'),
+        ).not.toBeInTheDocument()
+      }
+    })
+
+    it('ADMIN sees enabled regeneration for FAILED notes', async () => {
+      setActorIdentity(DEFAULT_DEV_ADMIN_ACTOR)
+      renderPage('/notes?status=FAILED')
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument()
+      })
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
+      if (noteCheckbox) {
+        fireEvent.click(noteCheckbox)
+      }
+
+      const toolbar = screen.queryByTestId('bulk-action-toolbar')
+      if (toolbar) {
+        const regenButton = screen.getByRole('button', { name: 'Request regeneration' })
+        expect(regenButton).not.toBeDisabled()
+        expect(
+          screen.queryByText('Only clinicians and administrators may request regeneration.'),
+        ).not.toBeInTheDocument()
+      }
+    })
+
+    it('non-FAILED selection shows "Regeneration is available only for failed notes."', async () => {
+      setActorIdentity(DEFAULT_DEV_ADMIN_ACTOR)
+      renderPage('/notes?status=APPROVED')
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument()
+      })
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      const noteCheckbox = checkboxes.find((c) => c.getAttribute('data-note-id'))
+      if (noteCheckbox) {
+        fireEvent.click(noteCheckbox)
+      }
+
+      const toolbar = screen.queryByTestId('bulk-action-toolbar')
+      if (toolbar) {
+        expect(
+          screen.getByText('Regeneration is available only for failed notes.'),
+        ).toBeInTheDocument()
+      }
     })
   })
 })
