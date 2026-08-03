@@ -1,6 +1,6 @@
 import './NotesListPage.css'
 
-import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { parseIsoDateTime } from '@/domain/datetime'
@@ -36,6 +36,13 @@ import { DEFAULT_DEV_SEED, getActorIdentity } from '@/services/api/actor-provide
 import { isApiClientError } from '@/services/api/api-errors'
 import type { NotesListSortDirection, NotesListSortField } from '@/services/api/notes-api'
 import { getConnectivityService } from '@/services/offline/connectivity'
+import {
+  createBulkActionCompletedEvent,
+  createNotesFiltersAppliedEvent,
+  createNotesListViewedEvent,
+  trackTelemetry,
+} from '@/services/telemetry'
+import { notesFiltersTelemetryPayload } from '@/services/telemetry/telemetry-notes-filters'
 
 function applyFiltersToSearchParams(
   current: URLSearchParams,
@@ -66,6 +73,20 @@ export function NotesListPage() {
   const listReturnTo = `/notes${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
 
   const urlFilters = useMemo(() => parseNotesListSearchParams(searchParams), [searchParams])
+
+  const listViewTracked = useRef(false)
+  useEffect(() => {
+    if (listViewTracked.current) {
+      return
+    }
+    listViewTracked.current = true
+    const connectivity = getConnectivityService().getSnapshot().kind
+    trackTelemetry((ctx) =>
+      createNotesListViewedEvent(ctx, {
+        connectivityState: connectivity,
+      }),
+    )
+  }, [])
 
   useEffect(() => {
     const desired = applyFiltersToSearchParams(searchParams, urlFilters)
@@ -107,7 +128,11 @@ export function NotesListPage() {
         if (trimmed === parsed.searchQuery) {
           return current
         }
-        return applyFiltersToSearchParams(current, { ...parsed, searchQuery: trimmed })
+        const next = { ...parsed, searchQuery: trimmed }
+        trackTelemetry((ctx) =>
+          createNotesFiltersAppliedEvent(ctx, notesFiltersTelemetryPayload(next)),
+        )
+        return applyFiltersToSearchParams(current, next)
       },
       { replace: true },
     )
@@ -234,6 +259,7 @@ export function NotesListPage() {
       return
     }
     setSearchParams(applyFiltersToSearchParams(searchParams, next), { replace: false })
+    trackTelemetry((ctx) => createNotesFiltersAppliedEvent(ctx, notesFiltersTelemetryPayload(next)))
   }
 
   function handleSearchInputChange(value: string): void {
@@ -396,6 +422,14 @@ export function NotesListPage() {
       .then((result) => {
         dispatchSelection({ type: 'REMOVE', noteIds: result.successIds })
         setResultAnnouncement(summarizeResults(result.successIds.length, result.failedIds.length))
+        trackTelemetry((ctx) =>
+          createBulkActionCompletedEvent(ctx, {
+            action: 'ASSIGN_REVIEWER',
+            selectedCount: noteIds.length,
+            successCount: result.successIds.length,
+            failureCount: result.failedIds.length,
+          }),
+        )
         if (result.failedIds.length > 0) {
           setBulkError(formatItemFailures(result.results))
         } else {
@@ -425,6 +459,14 @@ export function NotesListPage() {
       .then((result) => {
         dispatchSelection({ type: 'REMOVE', noteIds: result.successIds })
         setResultAnnouncement(summarizeResults(result.successIds.length, result.failedIds.length))
+        trackTelemetry((ctx) =>
+          createBulkActionCompletedEvent(ctx, {
+            action: 'REGENERATE',
+            selectedCount: noteIds.length,
+            successCount: result.successIds.length,
+            failureCount: result.failedIds.length,
+          }),
+        )
         if (result.failedIds.length > 0) {
           setBulkError(formatItemFailures(result.results))
         } else {

@@ -17,6 +17,7 @@ import {
 import { autosaveNeedsNavigationGuard } from '@/features/note-detail/autosave/autosave-status'
 import { reconcileDetailCacheAfterSave } from '@/features/note-detail/autosave/note-detail-cache'
 import { isEditorDirty } from '@/features/note-detail/editor/soap-editor.selectors'
+import { getDirtySectionCount } from '@/features/note-detail/editor/soap-editor.selectors'
 import type {
   SoapEditorAction,
   SoapEditorState,
@@ -31,6 +32,15 @@ import { createNoteVersion } from '@/services/api/create-version-api'
 import { getConnectivityService } from '@/services/offline/connectivity'
 import { getActiveReplayCoordinator } from '@/services/offline/offline-bootstrap'
 import { createQueuedWriteRepository } from '@/services/offline/queued-write.repository'
+import {
+  bucketDurationMs,
+  classifyTelemetryError,
+  createAutosaveFailedEvent,
+  createAutosaveStartedEvent,
+  createAutosaveSucceededEvent,
+  createOfflineWriteQueuedEvent,
+  trackTelemetry,
+} from '@/services/telemetry'
 
 export type UseNoteAutosaveOptions = {
   readonly enabled: boolean
@@ -103,11 +113,22 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
     version: 0,
     listeners: new Set(),
   })
+  const saveStartedAtRef = useRef<number | null>(null)
+  const editorStateRef = useRef(editorState)
+  editorStateRef.current = editorState
 
   const handleSuccess = useEffectEvent((event: SaveSuccessEvent) => {
     if (!mountedRef.current) {
       return
     }
+    const startedAt = saveStartedAtRef.current
+    saveStartedAtRef.current = null
+    trackTelemetry((ctx) =>
+      createAutosaveSucceededEvent(ctx, {
+        revision: event.revision,
+        durationBucket: bucketDurationMs(startedAt !== null ? performance.now() - startedAt : 0),
+      }),
+    )
     dispatch({
       type: 'ACKNOWLEDGE_SAVED_VERSION',
       baseVersionId: event.versionId,
@@ -156,26 +177,47 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
       store.coordinator = createAutosaveCoordinator({
         transport: {
           async save(intent, signal) {
-            const { registerLocalMutation } = await import('@/services/realtime')
-            registerLocalMutation({ mutationId: intent.clientMutationId })
-            const result = await createNoteVersion(
-              {
-                noteId: intent.noteId,
-                baseVersionId: intent.baseVersionId,
-                content: intent.content,
-                clientMutationId: intent.clientMutationId,
-              },
-              { signal },
+            saveStartedAtRef.current = performance.now()
+            trackTelemetry((ctx) =>
+              createAutosaveStartedEvent(ctx, {
+                dirtySectionCount: editorStateRef.current
+                  ? getDirtySectionCount(editorStateRef.current)
+                  : 0,
+              }),
             )
-            registerLocalMutation({
-              mutationId: intent.clientMutationId,
-              versionId: result.version.id,
-            })
-            return {
-              versionId: result.version.id,
-              revision: result.version.revision,
-              parentVersionId: result.version.parentVersionId,
-              savedContent: result.savedContent,
+            try {
+              const { registerLocalMutation } = await import('@/services/realtime')
+              registerLocalMutation({ mutationId: intent.clientMutationId })
+              const result = await createNoteVersion(
+                {
+                  noteId: intent.noteId,
+                  baseVersionId: intent.baseVersionId,
+                  content: intent.content,
+                  clientMutationId: intent.clientMutationId,
+                },
+                { signal },
+              )
+              registerLocalMutation({
+                mutationId: intent.clientMutationId,
+                versionId: result.version.id,
+              })
+              return {
+                versionId: result.version.id,
+                revision: result.version.revision,
+                parentVersionId: result.version.parentVersionId,
+                savedContent: result.savedContent,
+              }
+            } catch (error) {
+              const startedAt = saveStartedAtRef.current
+              trackTelemetry((ctx) =>
+                createAutosaveFailedEvent(ctx, {
+                  errorCode: classifyTelemetryError(error),
+                  durationBucket: bucketDurationMs(
+                    startedAt !== null ? performance.now() - startedAt : 0,
+                  ),
+                }),
+              )
+              throw error
             }
           },
         },
@@ -203,6 +245,7 @@ export function useNoteAutosave(options: UseNoteAutosaveOptions): UseNoteAutosav
           })
           const connectivity = getConnectivityService()
           const kind = connectivity.getSnapshot().kind
+          trackTelemetry((ctx) => createOfflineWriteQueuedEvent(ctx, { connectivityState: kind }))
           // Honor an explicit OFFLINE state (window offline event). Only use
           // DEGRADED + immediate replay when the browser still reports online —
           // that recovers from false "offline" stalls after request failures.

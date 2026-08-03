@@ -87,7 +87,12 @@ API is exposed on `globalThis.__SOULSIDE_ACTOR__` for tests/role switching.
   drafts and surface newer-version/conflict warnings; self-events correlate via `originatingClientMutationId`.
   Presence is informational (30s lease / 10s heartbeat), not an edit lock. Mock limitation: separate Playwright
   browser contexts do not share one MSW backend — use same-context tabs or the DEV `__SOULSIDE_REALTIME__` hook.
-- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts e2e/notes-offline.spec.ts e2e/notes-realtime.spec.ts`
+- **Privacy-safe telemetry (12):** allowlisted operational events only (list/filter/detail/editor/autosave/conflict/
+  offline/realtime/bulk). Runtime redaction rejects clinical/PII keys; no `noteId` or search text. Batches of 20 /
+  10s flush with backoff retry and Dexie `telemetryBatches` persistence. Telemetry failures never affect product
+  workflows. Mock endpoint `POST /api/telemetry/batches` is assignment-only (not a production vendor).
+  DEV flush helper: `globalThis.__SOULSIDE_TELEMETRY__.flush()`.
+- Playwright: `pnpm test:e2e -- e2e/notes-detail.spec.ts e2e/notes-editor.spec.ts e2e/notes-conflict.spec.ts e2e/notes-offline.spec.ts e2e/notes-realtime.spec.ts e2e/notes-telemetry.spec.ts`
 
 ## Scripts
 

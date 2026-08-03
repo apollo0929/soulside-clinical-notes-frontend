@@ -28,6 +28,7 @@ import {
 import { parseActorHeaders } from '@/mock/msw/actor-headers'
 import { createBulkActionHandlers } from '@/mock/msw/bulk-actions.handlers'
 import { createRealtimeHandlers } from '@/mock/msw/realtime.handlers'
+import { createTelemetryHandlers } from '@/mock/msw/telemetry.handlers'
 import { DEFAULT_NOTES_LIST_LIMIT, type MockBackendService } from '@/mock/services/backend'
 
 const seedBodySchema = z.strictObject({
@@ -287,6 +288,7 @@ export function createMockBackendHandlers(backend: MockBackendService) {
 
     ...createBulkActionHandlers(backend),
     ...createRealtimeHandlers(backend),
+    ...createTelemetryHandlers(backend),
   ]
 }
 

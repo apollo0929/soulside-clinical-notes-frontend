@@ -9,6 +9,7 @@ export type FailureEndpoint =
   | 'notes.createVersion'
   | 'notes.bulkAssign'
   | 'notes.bulkRegenerate'
+  | 'telemetry.batches'
   | 'dev.seed'
   | 'default'
 

@@ -56,6 +56,15 @@ import { isApiClientError, isNetworkApiError } from '@/services/api/api-errors'
 import { getConnectivityService } from '@/services/offline/connectivity'
 import { createQueuedWriteRepository } from '@/services/offline/queued-write.repository'
 import { subscribeReplaySuccess } from '@/services/offline/replay-success-bus'
+import {
+  bucketDurationMs,
+  createConflictDetectedEvent,
+  createConflictResolvedEvent,
+  createEditorDiscardedEvent,
+  createEditorOpenedEvent,
+  createNoteDetailOpenedEvent,
+  trackTelemetry,
+} from '@/services/telemetry'
 
 function tryParseNoteId(raw: string | undefined): NoteId | null {
   if (!raw) {
@@ -93,6 +102,15 @@ export function NoteDetailPage() {
   )
 
   const aggregate = detailQuery.data ?? null
+  const detailOpenedTracked = useRef(false)
+  useEffect(() => {
+    if (!aggregate || detailOpenedTracked.current) {
+      return
+    }
+    detailOpenedTracked.current = true
+    trackTelemetry((ctx) => createNoteDetailOpenedEvent(ctx, { noteStatus: aggregate.note.status }))
+  }, [aggregate])
+
   const sortedVersions = useMemo((): readonly NoteVersionRef[] => {
     if (!aggregate) {
       return []
@@ -231,6 +249,8 @@ export function NoteDetailPage() {
   const [conflictHold, setConflictHold] = useState<ConflictHold | null>(null)
   const conflictDto = conflictFromAutosaveStatus(autosave.status)
   const inConflict = conflictDto !== null
+  const conflictDetectedTracked = useRef(false)
+  const conflictStartedAtRef = useRef<number | null>(null)
 
   // Capture local draft once when CONFLICT begins; clear when autosave leaves CONFLICT.
   if (inConflict && soapEditor.state && conflictHold === null && conflictDto) {
@@ -250,11 +270,37 @@ export function NoteDetailPage() {
     setConflictHold(null)
   }
 
+  useEffect(() => {
+    if (!inConflict) {
+      conflictDetectedTracked.current = false
+      return
+    }
+    if (conflictDetectedTracked.current) {
+      return
+    }
+    conflictDetectedTracked.current = true
+    conflictStartedAtRef.current = performance.now()
+    trackTelemetry((ctx) =>
+      createConflictDetectedEvent(ctx, {
+        conflictingSectionCount: 4,
+      }),
+    )
+  }, [inConflict])
+
   const conflictResolution = useConflictResolution({
     active: inConflict && conflictHold !== null,
     snapshot: conflictHold?.snapshot ?? null,
     conflict: conflictHold?.dto ?? null,
     onResolved: (result) => {
+      const durationMs =
+        conflictStartedAtRef.current !== null ? performance.now() - conflictStartedAtRef.current : 0
+      conflictStartedAtRef.current = null
+      trackTelemetry((ctx) =>
+        createConflictResolvedEvent(ctx, {
+          conflictingSectionCount: 4,
+          durationBucket: bucketDurationMs(durationMs),
+        }),
+      )
       soapEditor.dispatch({
         type: 'ACCEPT_SAVED_VERSION',
         baseVersionId: result.versionId,
@@ -462,6 +508,11 @@ export function NoteDetailPage() {
                   className="note-detail-page__edit-note"
                   onClick={() => {
                     soapEditor.beginEdit()
+                    if (aggregate) {
+                      trackTelemetry((ctx) =>
+                        createEditorOpenedEvent(ctx, { noteStatus: aggregate.note.status }),
+                      )
+                    }
                   }}
                 >
                   Edit note
@@ -509,6 +560,10 @@ export function NoteDetailPage() {
                 soapEditor.dispatch({ type: 'RESET_SECTION', section })
               }}
               onDiscardAndExit={() => {
+                const dirtyCount = soapEditor.state?.dirtySections.size ?? 0
+                trackTelemetry((ctx) =>
+                  createEditorDiscardedEvent(ctx, { dirtySectionCount: dirtyCount }),
+                )
                 if (noteId) {
                   void createQueuedWriteRepository().removeUnsentForNote(noteId)
                 }

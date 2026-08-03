@@ -152,8 +152,10 @@ export function reconcileRealtimeEvent(queryClient: QueryClient, event: Realtime
           void persistNoteDetailToOfflineCache(noteId, next)
         }
       }
-      // Remote heads need SOAP content from REST; metadata-only patches keep prior body.
-      void queryClient.invalidateQueries({ queryKey: detailKey, refetchType: 'active' })
+      // Soft invalidate only. An active refetch can overwrite a patched remote head
+      // with a lagging REST snapshot and clear dirty-editor newer-version warnings.
+      // SOAP content is loaded on the next safe detail fetch (clean editor / remount).
+      void queryClient.invalidateQueries({ queryKey: detailKey, refetchType: 'none' })
       return
     }
     case 'NOTE_STATUS_CHANGED':
@@ -218,6 +220,14 @@ export function ensureRealtimeBootstrap(
         },
         onResync: () => {
           void queryClient.invalidateQueries({ queryKey: notesKeys.all })
+          void import('@/services/telemetry').then(
+            ({ createRealtimeResyncRequiredEvent, trackTelemetry }) => {
+              const kind = connectivity.getSnapshot().kind
+              trackTelemetry((ctx) =>
+                createRealtimeResyncRequiredEvent(ctx, { connectivityState: kind }),
+              )
+            },
+          )
         },
       },
     })
@@ -230,6 +240,25 @@ export function ensureRealtimeBootstrap(
     activeCoordinator = coordinator
     notifyCoordinatorReady()
     coordinator.start()
+
+    let sawConnected = false
+    coordinator.subscribeConnectionState((state) => {
+      if (state !== 'CONNECTED') {
+        return
+      }
+      void import('@/services/telemetry').then(
+        ({ createRealtimeConnectedEvent, createRealtimeReconnectedEvent, trackTelemetry }) => {
+          const kind = connectivity.getSnapshot().kind
+          if (!sawConnected) {
+            sawConnected = true
+            trackTelemetry((ctx) => createRealtimeConnectedEvent(ctx, { connectivityState: kind }))
+            return
+          }
+          trackTelemetry((ctx) => createRealtimeReconnectedEvent(ctx, { connectivityState: kind }))
+        },
+      )
+    })
+
     return coordinator
   })
 

@@ -71,7 +71,7 @@ describe('reconcileRealtimeEvent', () => {
     resetMutationCorrelationForTests()
   })
 
-  it('applies remote NOTE_VERSION_CREATED and marks detail for active refetch', () => {
+  it('applies remote NOTE_VERSION_CREATED and soft-invalidates detail', () => {
     resetMutationCorrelationForTests()
     const queryClient = new QueryClient()
     const detailKey = notesKeys.detail(parseNoteId('note_123'))

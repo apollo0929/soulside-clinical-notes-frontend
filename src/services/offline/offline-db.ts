@@ -1,3 +1,13 @@
+/**
+ * Soulside offline IndexedDB (Dexie).
+ *
+ * Schema version history:
+ * - v1: queuedWrites, cachedNoteDetails, cachedNoteLists, replayMetadata
+ * - v2: + telemetryBatches (privacy-safe telemetry offline persistence)
+ *
+ * Future migrations must bump version() and use .upgrade() callbacks.
+ * Do not mutate prior stores in place without a version bump.
+ */
 import Dexie, { type EntityTable } from 'dexie'
 
 import type {
@@ -6,21 +16,14 @@ import type {
   QueuedCreateVersionWrite,
   ReplayMetadataRecord,
 } from '@/services/offline/offline.types'
+import type { StoredTelemetryBatch } from '@/services/telemetry/telemetry.types'
 
-/**
- * Soulside offline IndexedDB (Dexie).
- *
- * Schema version history:
- * - v1: queuedWrites, cachedNoteDetails, cachedNoteLists, replayMetadata
- *
- * Future migrations must bump version() and use .upgrade() callbacks.
- * Do not mutate v1 stores in place without a version bump.
- */
 export class SoulsideOfflineDatabase extends Dexie {
   queuedWrites!: EntityTable<QueuedCreateVersionWrite, 'id'>
   cachedNoteDetails!: EntityTable<CachedNoteDetailRecord, 'noteId'>
   cachedNoteLists!: EntityTable<CachedNoteListRecord, 'queryKey'>
   replayMetadata!: EntityTable<ReplayMetadataRecord, 'id'>
+  telemetryBatches!: EntityTable<StoredTelemetryBatch, 'batchId'>
 
   constructor(databaseName: string) {
     super(databaseName)
@@ -29,6 +32,13 @@ export class SoulsideOfflineDatabase extends Dexie {
       cachedNoteDetails: 'noteId, updatedAt',
       cachedNoteLists: 'queryKey, updatedAt',
       replayMetadata: 'id',
+    })
+    this.version(2).stores({
+      queuedWrites: 'id, noteId, clientMutationId, status, createdAt, [noteId+createdAt]',
+      cachedNoteDetails: 'noteId, updatedAt',
+      cachedNoteLists: 'queryKey, updatedAt',
+      replayMetadata: 'id',
+      telemetryBatches: 'batchId, createdAt, status',
     })
   }
 }
@@ -69,18 +79,21 @@ export async function resetOfflineDatabaseForTests(): Promise<void> {
 export async function clearOfflineDatabaseContents(
   db: SoulsideOfflineDatabase = getOfflineDatabase(),
 ): Promise<void> {
+  await db.open()
   await db.transaction(
     'rw',
     db.queuedWrites,
     db.cachedNoteDetails,
     db.cachedNoteLists,
     db.replayMetadata,
+    db.telemetryBatches,
     async () => {
       await Promise.all([
         db.queuedWrites.clear(),
         db.cachedNoteDetails.clear(),
         db.cachedNoteLists.clear(),
         db.replayMetadata.clear(),
+        db.telemetryBatches.clear(),
       ])
     },
   )

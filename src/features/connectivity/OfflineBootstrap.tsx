@@ -41,6 +41,28 @@ export function OfflineBootstrap() {
           content: result.savedContent,
           mutationId: entry.clientMutationId,
         })
+        void import('@/services/telemetry').then(
+          ({ bucketDurationMs, createOfflineReplaySucceededEvent, trackTelemetry }) => {
+            trackTelemetry((ctx) =>
+              createOfflineReplaySucceededEvent(ctx, {
+                retryCount: entry.retryCount,
+                durationBucket: bucketDurationMs(0),
+              }),
+            )
+          },
+        )
+      },
+      onReplayFailed: ({ entry, error }) => {
+        void import('@/services/telemetry').then(
+          ({ classifyTelemetryError, createOfflineReplayFailedEvent, trackTelemetry }) => {
+            trackTelemetry((ctx) =>
+              createOfflineReplayFailedEvent(ctx, {
+                errorCode: classifyTelemetryError(error),
+                retryCount: entry.retryCount,
+              }),
+            )
+          },
+        )
       },
     })
   }, [queryClient])

@@ -44,6 +44,10 @@ export type ReplayCoordinatorDeps = {
     readonly entry: QueuedCreateVersionWrite
     readonly result: ReplayTransportResult
   }) => void
+  readonly onReplayFailed?: (input: {
+    readonly entry: QueuedCreateVersionWrite
+    readonly error: unknown
+  }) => void
 }
 
 function defaultScheduler(): ReplayScheduler {
@@ -273,6 +277,7 @@ export class ReplayCoordinator {
             errorCode: isApiClientError(error) ? error.code : 'CLIENT_ERROR',
             retryCount: entry.retryCount,
           })
+          this.#deps.onReplayFailed?.({ entry, error })
           return
         }
 
@@ -288,6 +293,7 @@ export class ReplayCoordinator {
                 : 'UNKNOWN',
             retryCount: nextRetry,
           })
+          this.#deps.onReplayFailed?.({ entry, error })
           return
         }
 

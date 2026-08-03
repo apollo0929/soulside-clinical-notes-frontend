@@ -19,6 +19,7 @@ import {
 export type OfflineBootstrapHandlers = {
   readonly onConflict: Parameters<typeof createReplayCoordinator>[0]['onConflict']
   readonly onReplaySuccess: Parameters<typeof createReplayCoordinator>[0]['onReplaySuccess']
+  readonly onReplayFailed?: Parameters<typeof createReplayCoordinator>[0]['onReplayFailed']
 }
 
 let bootstrapPromise: Promise<ReplayCoordinator> | null = null
@@ -83,6 +84,7 @@ export async function ensureOfflineBootstrap(
         connectivity,
         onConflict: handlers.onConflict,
         onReplaySuccess: handlers.onReplaySuccess,
+        ...(handlers.onReplayFailed ? { onReplayFailed: handlers.onReplayFailed } : {}),
       })
       if (epoch !== bootstrapEpoch) {
         coordinator.dispose()
@@ -108,6 +110,7 @@ export async function ensureOfflineBootstrap(
         connectivity: getConnectivityService(),
         onConflict: handlers.onConflict,
         onReplaySuccess: handlers.onReplaySuccess,
+        ...(handlers.onReplayFailed ? { onReplayFailed: handlers.onReplayFailed } : {}),
       })
       coordinator.dispose()
       return coordinator

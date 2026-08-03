@@ -97,3 +97,20 @@ export {
   type SoapSectionsDto,
   soapSectionsDtoSchema,
 } from '@/domain/schemas/soap'
+export {
+  MAX_TELEMETRY_EVENTS_PER_BATCH,
+  TELEMETRY_DURATION_BUCKETS,
+  TELEMETRY_ERROR_CODES,
+  TELEMETRY_EVENT_NAMES,
+  type TelemetryBatchRequestDto,
+  telemetryBatchRequestDtoSchema,
+  type TelemetryBatchResponseDto,
+  telemetryBatchResponseDtoSchema,
+  type TelemetryBulkAction,
+  type TelemetryConnectivityKind,
+  type TelemetryDurationBucket,
+  type TelemetryErrorCode,
+  type TelemetryEvent,
+  type TelemetryEventName,
+  telemetryEventSchema,
+} from '@/domain/schemas/telemetry'

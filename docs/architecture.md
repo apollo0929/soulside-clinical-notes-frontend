@@ -819,3 +819,76 @@ sequenceDiagram
     A->>E: Show newer-version/conflict state
   end
 ```
+
+## Privacy-Safe Telemetry (Step 12)
+
+Operational diagnostics only. Dependency direction:
+
+`Feature → TelemetryClient → TelemetryCoordinator → memory batch → IndexedDB → typed API → mock endpoint`
+
+Telemetry is asynchronous, non-blocking, best-effort, schema-validated, and privacy-preserving.
+Failures never mutate product state, never show banners, and never block navigation/save/replay/realtime.
+
+### Event allowlist
+
+- `NOTES_LIST_VIEWED`, `NOTES_FILTERS_APPLIED`
+- `NOTE_DETAIL_OPENED`, `EDITOR_OPENED`, `EDITOR_DISCARDED`
+- `AUTOSAVE_STARTED` / `SUCCEEDED` / `FAILED`
+- `VERSION_CONFLICT_DETECTED` / `RESOLVED`
+- `OFFLINE_WRITE_QUEUED`, `OFFLINE_REPLAY_SUCCEEDED` / `FAILED`
+- `REALTIME_CONNECTED` / `RECONNECTED` / `RESYNC_REQUIRED`
+- `BULK_ACTION_COMPLETED`
+
+Payloads are bounded metadata only (counts, enums, duration buckets, connectivity kind).
+**No** `noteId`, SOAP strings, patient/reviewer display names, search text, rejection reasons, stack traces, or raw error bodies.
+
+### Runtime redaction
+
+Even typed factory events pass `redactTelemetryEvent`: schema parse + recursive forbidden-key scan
+(`subjective`/`plan`/`patient*`/`searchText`/`noteId`/…), URL-with-query rejection, string/array/depth caps.
+Unsafe events are dropped (internal counter); never partially sent.
+
+### Batching and limits
+
+- Batch size **20**, interval **10s**, max in-memory **200**
+- One POST in flight; arrivals during flush wait for a single follow-up
+- Overflow drops oldest non-critical events; preserves operational failure/conflict/resync when practical
+- Exact retry reuses `batchId` + fingerprint; changed event set → new batch
+
+### Retry / IndexedDB
+
+Transient network/5xx: backoff `1s → 2s → 4s → 8s → 30s`. 400/403 are not retried.
+After max attempts, the exact batch is persisted in Dexie `telemetryBatches` (schema **v2**), separate from the clinical write queue.
+Startup requeues interrupted `SENDING` → `PENDING` and flushes when online without blocking render.
+Intentional OFFLINE does not deliver; telemetry never sets connectivity to OFFLINE.
+`pagehide` / `visibilitychange` persist the buffer; no unload blocking.
+
+### Integration and replacement
+
+Features call named factories + `trackTelemetry` (or no-op client in tests). Mock `POST /api/telemetry/batches`
+validates Zod, dedupes batch ids, and does not log payloads. A production vendor would replace the transport
+behind `TelemetryClient` without changing feature call sites.
+
+Compliance note: this is assignment-grade operational telemetry, not a HIPAA production pipeline
+(no encryption-at-rest guarantees beyond browser IndexedDB; no BAAs; no PHI intended in events).
+
+```mermaid
+sequenceDiagram
+  participant F as Feature
+  participant T as Telemetry coordinator
+  participant D as IndexedDB
+  participant A as Telemetry API
+
+  F->>T: Track typed safe event
+  T->>T: Validate + redact + buffer
+  alt threshold or interval
+    T->>A: Send batch
+    alt accepted
+      A-->>T: Ack batch
+    else transient failure
+      A-->>T: Failure
+      T->>D: Persist exact batch
+    end
+  end
+  Note over T,D: Product flow never waits for telemetry
+```

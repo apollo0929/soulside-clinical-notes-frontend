@@ -10,6 +10,9 @@ export type UserId = Brand<string, 'UserId'>
 export type ReviewEventId = Brand<string, 'ReviewEventId'>
 export type ClientMutationId = Brand<string, 'ClientMutationId'>
 export type RealtimeEventId = Brand<string, 'RealtimeEventId'>
+export type TelemetryEventId = Brand<string, 'TelemetryEventId'>
+export type TelemetrySessionId = Brand<string, 'TelemetrySessionId'>
+export type TelemetryBatchId = Brand<string, 'TelemetryBatchId'>
 
 function createBrandedIdSchema<TBrand extends string>(brand: TBrand) {
   return z
@@ -27,6 +30,9 @@ export const userIdSchema = createBrandedIdSchema('UserId')
 export const reviewEventIdSchema = createBrandedIdSchema('ReviewEventId')
 export const clientMutationIdSchema = createBrandedIdSchema('ClientMutationId')
 export const realtimeEventIdSchema = createBrandedIdSchema('RealtimeEventId')
+export const telemetryEventIdSchema = createBrandedIdSchema('TelemetryEventId')
+export const telemetrySessionIdSchema = createBrandedIdSchema('TelemetrySessionId')
+export const telemetryBatchIdSchema = createBrandedIdSchema('TelemetryBatchId')
 
 export function parseNoteId(value: string): NoteId {
   return noteIdSchema.parse(value)
@@ -58,4 +64,16 @@ export function parseClientMutationId(value: string): ClientMutationId {
 
 export function parseRealtimeEventId(value: string): RealtimeEventId {
   return realtimeEventIdSchema.parse(value)
+}
+
+export function parseTelemetryEventId(value: string): TelemetryEventId {
+  return telemetryEventIdSchema.parse(value)
+}
+
+export function parseTelemetrySessionId(value: string): TelemetrySessionId {
+  return telemetrySessionIdSchema.parse(value)
+}
+
+export function parseTelemetryBatchId(value: string): TelemetryBatchId {
+  return telemetryBatchIdSchema.parse(value)
 }

@@ -33,6 +33,7 @@ import {
   type NotesListRequest,
 } from '@/mock/services/notes-list'
 import { type ActorContext, type DevSeedRequest, runDevSeed } from '@/mock/services/seed-service'
+import { MockTelemetryService } from '@/mock/services/telemetry-service'
 import {
   transitionNote,
   type TransitionNoteInput,
@@ -86,6 +87,7 @@ export class MockBackendService {
   readonly failures: FailureController
   readonly clock: MockClock
   readonly realtime: RealtimeServer
+  readonly telemetry: MockTelemetryService
   private readonly fixedClock: FixedMockClock | null
 
   constructor(options: MockBackendOptions = {}) {
@@ -109,6 +111,7 @@ export class MockBackendService {
       database: this.database,
       clock: { now: () => this.clock.now() },
     })
+    this.telemetry = new MockTelemetryService()
 
     if (options.autoSeed !== false) {
       seedMockDatabase(this.database, {

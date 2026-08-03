@@ -64,6 +64,9 @@ export function installDevRealtimeApi(): void {
         currentVersionId: syntheticVersion.id,
       }) satisfies Note
 
+      database.appendVersion(syntheticVersion)
+      database.updateNote(syntheticNote)
+
       const event = server.emitVersionCreated({
         note: syntheticNote,
         version: syntheticVersion,
